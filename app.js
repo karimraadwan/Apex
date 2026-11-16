@@ -189,8 +189,11 @@ const validDate = (opt) => (v) => {
 };
 
 /* ---------- views ---------- */
+const d0 = () => S.data;
 function syncBanner() {
   const c = D().cfg;
+  const notYet = !d0().connected.whoop || !d0().connected.strava;
+  if (notYet) return '<div class="card infoc"><h3>Connect your apps</h3><p class="mut">Go to More and tap Connect WHOOP and Connect Strava. After that, Apex pulls your data every morning by itself.</p>' + (S.tab !== 'more' ? '<button class="p" style="width:100%;margin-top:16px" data-act="tab" data-t="more">Go to More</button>' : '') + '</div>';
   if (c.last_sync_error) return '<div class="card warnc" role="alert"><b>Last sync had a problem</b><p class="small" style="margin:4px 0">' + esc(c.last_sync_error) + '</p><p class="mut small">Last good sync: ' + esc(ago(c.last_sync_ok)) + '. If it says reconnect, use More > Connect.</p></div>';
   return '';
 }
@@ -261,7 +264,7 @@ function viewToday() {
   const wr = logs('WaterLog', ds)[0], ml2 = wr ? Number(wr.ml) : 0, n = Math.ceil(tgt / bot), f = Math.floor(ml2 / bot);
   h += '<h2>Water</h2><div class="card' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp"><span class="big">' + (ml2 / 1000).toFixed(2) + ' L</span><span class="mut">target ' + (tgt / 1000).toFixed(1) + ' L' + (ml2 >= tgt ? ' · done ✓' : '') + '</span></div><div class="bottles" role="img" aria-label="' + f + ' of ' + n + ' bottles">';
   for (let i = 0; i < Math.max(n, f); i++) h += '<div class="bt ' + (i < f ? 'f' : '') + '"></div>';
-  h += '</div><div class="row"><button data-act="wminus" ' + (ml2 <= 0 ? 'disabled' : '') + '>- bottle</button><button class="p" data-act="wplus">+ bottle (' + bot + ' ml)</button></div></div>';
+  h += '</div><div class="row"><button data-act="wminus" aria-label="Remove one bottle" ' + (ml2 <= 0 ? 'disabled' : '') + '>− ' + bot + ' ml</button><button class="p" data-act="wplus" aria-label="Add one bottle">+ ' + bot + ' ml</button></div></div>';
 
   const ck = logs('Checkin', ds)[0];
   h += '<h2>How do you feel?</h2><div class="card row" role="group" aria-label="How do you feel">' + ['Fresh', 'OK', 'Tired'].map((x) => '<button class="' + (ck && ck.feel === x ? 'p' : '') + '" aria-pressed="' + !!(ck && ck.feel === x) + '" data-act="feel" data-v="' + x + '">' + x + '</button>').join('') + '</div>';

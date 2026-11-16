@@ -170,3 +170,15 @@ details[open] .det{animation:fadeDown .35s var(--ease)}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms !important;animation-delay:0s !important;transition-duration:.01ms !important}
 }
+
+/* ---------- iPhone fixes (v5) ---------- */
+#brand{display:none !important}                 /* old header from the first version */
+input[type=time],input[type=date]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;text-align:left}
+input::-webkit-date-and-time-value{text-align:left}
+.row.sp>*{flex:0 1 auto}
+/* iOS-style round checkboxes */
+.chk{-webkit-appearance:none;appearance:none;width:26px;height:26px;min-height:0;flex:none;border-radius:50%;border:2px solid var(--tx3);background:transparent;display:grid;place-content:center;transition:background-color .2s var(--ease),border-color .2s var(--ease),transform .25s var(--spring)}
+.chk::after{content:"";width:12px;height:7px;border-left:2.5px solid #fff;border-bottom:2.5px solid #fff;transform:rotate(-45deg) scale(0);margin-top:-3px;transition:transform .25s var(--spring)}
+.chk:checked{background:var(--accFill);border-color:var(--accFill);transform:scale(1.06)}
+.chk:checked::after{transform:rotate(-45deg) scale(1)}
+.infoc{background:var(--accTint)}
