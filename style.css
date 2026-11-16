@@ -510,3 +510,21 @@ button.txt{min-width:44px}
 @media (prefers-color-scheme:light){.mt-dot{color:#fff}}
 .mt-head{flex-wrap:wrap}
 .mt-head b{min-width:0;overflow-wrap:anywhere}
+
+/* ---------- v10: plan inputs ---------- */
+.plan-in{padding:var(--s4) var(--s5);margin-bottom:var(--s2);background:var(--accTint);box-shadow:none}
+.card.list.flat{box-shadow:none;background:var(--card2);margin-top:var(--s4)}
+.upbtn{display:flex;align-items:center;justify-content:center;gap:8px;min-height:56px;margin-top:var(--s4);border-radius:var(--r2);background:var(--accFill);color:#fff;font-weight:600;cursor:pointer}
+.upbtn svg{width:20px;height:20px}
+.upbtn:active{transform:scale(.97)}
+.empty-note{font-size:.85rem;color:var(--tx3);text-align:center;padding:var(--s5) 0;margin:0}
+.chiprow{display:flex;flex-wrap:wrap;gap:8px;margin-top:var(--s3)}
+.chip{min-height:44px;padding:8px 14px;border-radius:99px;background:var(--card2);font-size:.85rem;font-weight:600;color:var(--tx);display:inline-flex;align-items:center;gap:6px}
+.chip.on{background:var(--accTint);color:var(--acc);padding-right:4px}
+.chip-x{min-height:44px;width:44px;margin:-6px -6px -6px 0;padding:0;border-radius:50%;background:transparent;color:var(--acc);font-size:.75rem}
+.lib.add{border:0;padding:0;text-align:left;font-weight:400}
+.lib.add .th{background:var(--card2)}
+.lib.add .th span{background:var(--accFill);color:#fff}
+.lib.add .th svg{margin:0}
+button.card{display:block;border:0;font-weight:400}
+.modal .row input{flex:1}

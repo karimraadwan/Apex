@@ -86,8 +86,8 @@ async function flush() {
 function applyLocal(item) {
   const d = S.data; if (!d) return;
   if (item.action === 'log' || item.action === 'del') {
-    const keys = { MealLog: ['date', 'slot'], WaterLog: ['date'], WorkoutLog: ['date', 'session'], Checkin: ['date'], Body: ['date'], Events: ['name', 'date'] }[item.table];
-    const L = item.table === 'Events' ? d.events : d.logs[item.table];
+    const keys = { MealLog: ['date', 'slot'], WaterLog: ['date'], WorkoutLog: ['date', 'session'], Checkin: ['date'], Body: ['date'], Events: ['name', 'date'], Library: ['url'], Interests: ['name'] }[item.table];
+    const L = item.table === 'Events' ? d.events : item.table === 'Library' ? d.library : item.table === 'Interests' ? d.interests : d.logs[item.table];
     if (!L || !keys) return;
     const i = L.findIndex((r) => keys.every((k) => String(r[k]) === String(item.row[k])));
     if (item.action === 'del') { if (i >= 0) L.splice(i, 1); return; }
@@ -121,7 +121,7 @@ function normalize(d) {
   const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   d.whoop.sort(byDate); d.strava.sort(byDate); // B1: never trust row order
   Object.values(d.logs).forEach((l) => l.sort(byDate));
-  d.verdicts = d.verdicts || [];
+  d.verdicts = d.verdicts || []; d.docs = d.docs || []; d.interests = d.interests || []; d.library = d.library || [];
   return d;
 }
 
@@ -360,16 +360,23 @@ function viewToday() {
 }
 
 /* ---------- sheets ---------- */
-function infoSheet(title, body) {
+function infoSheet(title, body, id) {
   closeSheets(true);
   const m = document.createElement('div');
-  m.className = 'modal info';
+  m.className = 'modal info'; if (id) m.dataset.id = id;
   m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', title);
   m.innerHTML = '<div class="sheet"><div class="sheet-h"><h3>' + esc(title) + '</h3><button class="icon-btn x" data-close aria-label="Close">✕</button></div>' + body + '</div>';
   S.lastFocus = document.activeElement;
   document.body.appendChild(m);
   setTimeout(() => { const f = m.querySelector('input,[data-close]'); if (f) f.focus(); }, 60);
   m.addEventListener('click', (ev) => { if (ev.target === m || ev.target.closest('[data-close]')) closeSheets(); });
+}
+function refreshSheet(id, body) {
+  const m = document.querySelector('.modal.info[data-id="' + id + '"]');
+  if (!m) return;
+  const h = m.querySelector('.sheet-h');
+  while (h.nextSibling) h.nextSibling.remove();
+  h.insertAdjacentHTML('afterend', body);
 }
 function closeSheets(now) {
   const open = document.querySelectorAll('.modal.info');
@@ -431,6 +438,39 @@ function blocksHTML(txt, day) {
 }
 function parseDetails(txt) { return blocksHTML(txt); }
 
+/* ---------- plan inputs: documents, inspiration links, interests ---------- */
+const INTEREST_IDEAS = ['Rock climbing', 'Bouldering', 'Swimming', 'Yoga', 'Boxing', 'BJJ', 'Muay Thai', 'Padel', 'Hiking', 'Cycling', 'Running', 'HYROX', 'Calisthenics', 'Pilates', 'Surfing', 'CrossFit'];
+function platformOf(u) {
+  const h = (u.match(/^https?:\/\/([^/]+)/i) || ['', ''])[1].toLowerCase().replace(/^www\./, '');
+  return /instagram/.test(h) ? 'Instagram' : /tiktok/.test(h) ? 'TikTok' : /youtu/.test(h) ? 'YouTube' : h || 'Link';
+}
+function fmtSize(b) { b = Number(b) || 0; return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; }
+function docsBody() {
+  const docs = d0().docs.slice().reverse();
+  return '<p class="mut small">Upload your program PDFs, nutrition plans, photos of notes, anything I should use. They are saved privately in your Google Drive (folder "Apex plan documents"), and I read them when I build your next plan.</p>' +
+    '<label class="upbtn" for="docfile">' + ICON(I.plus) + (S.uploading ? 'Uploading ' + esc(S.uploading) + '…' : 'Upload a document') + '</label><input type="file" id="docfile" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.md,image/*" multiple hidden>' +
+    '<p class="mut small" style="margin-top:8px">PDF, Word, Excel, text or photos · up to 20 MB each</p>' +
+    (docs.length ? '<div class="card list flat">' + docs.map((x) => '<a class="li" href="' + esc(x.url) + '" target="_blank" rel="noopener"><span class="li-ic" style="background:#ef4444">' + ICON('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>') + '</span><span class="li-main"><b>' + esc(x.name) + '</b><span class="mut small">' + esc(ago(x.date)) + ' · ' + fmtSize(x.size) + '</span></span><span class="li-end"><span class="chev">›</span></span></a>').join('') + '</div>' : '<p class="empty-note">No documents yet.</p>');
+}
+function inspBody() {
+  const d = d0(), cats = [...new Set(d.library.map((l) => l.tab).concat(d.interests.map((i) => i.name)))];
+  const mine = d.library.slice().reverse();
+  return '<p class="mut small">Paste a link to a reel, TikTok or YouTube video that inspires you. Tip: in Instagram or TikTok tap Share, then Copy link.</p>' +
+    '<label for="il" class="mut small" style="margin:16px 0 8px">Link</label><input id="il" inputmode="url" autocomplete="off" placeholder="https://www.instagram.com/reel/…">' +
+    '<label for="ic" class="mut small" style="margin:16px 0 8px">Category</label><input id="ic" list="icl" autocomplete="off" placeholder="e.g. Rock climbing, Mobility, HYROX"><datalist id="icl">' + cats.map((c) => '<option value="' + esc(c) + '">').join('') + '</datalist>' +
+    '<div class="chiprow">' + cats.slice(0, 8).map((c) => '<button class="chip" data-act="icpick" data-v="' + esc(c) + '">' + esc(c) + '</button>').join('') + '</div>' +
+    '<label for="in" class="mut small" style="margin:16px 0 8px">What do you like about it? (optional)</label><input id="in" maxlength="120" placeholder="e.g. great finger-strength drills">' +
+    '<p class="err" id="ierr" role="alert"></p><button class="p" style="width:100%" data-act="inspsave">Save to my library</button>' +
+    '<h2 style="margin-top:28px">Saved (' + mine.length + ')</h2><div class="card list flat">' + mine.slice(0, 30).map((l) => '<div class="li"><span class="li-ic" style="background:' + ({ Instagram: '#d6249f', TikTok: '#111', YouTube: '#ff0000' }[l.creator] || 'var(--accFill)') + '">' + ICON(I.play) + '</span><span class="li-main"><b>' + esc(l.title) + '</b><span class="mut small">' + esc(l.tab) + ' · ' + esc(l.creator) + '</span></span><button class="icon-btn x" data-act="inspdel" data-u="' + esc(l.url) + '" aria-label="Remove ' + esc(l.title) + '">✕</button></div>').join('') + '</div>';
+}
+function interestsBody() {
+  const have = d0().interests.map((i) => i.name), lower = have.map((x) => x.toLowerCase());
+  return '<p class="mut small">Tell me the sports and training styles you want in your life. I will mix them into your next plan, for example a climbing session instead of a gym day.</p>' +
+    '<h2>Your sports</h2>' + (have.length ? '<div class="chiprow">' + have.map((n) => '<span class="chip on">' + esc(n) + '<button class="chip-x" data-act="intdel" data-n="' + esc(n) + '" aria-label="Remove ' + esc(n) + '">✕</button></span>').join('') + '</div>' : '<p class="empty-note">Nothing added yet.</p>') +
+    '<h2>Add</h2><div class="chiprow">' + INTEREST_IDEAS.filter((x) => lower.indexOf(x.toLowerCase()) < 0).map((n) => '<button class="chip" data-act="intadd" data-n="' + esc(n) + '">+ ' + esc(n) + '</button>').join('') + '</div>' +
+    '<div class="row" style="margin-top:16px"><input id="ia" maxlength="40" placeholder="Something else, e.g. Kitesurfing" aria-label="Add your own sport"><button class="p fit" data-act="intaddc">Add</button></div>';
+}
+
 /* ---------- Meals ---------- */
 function shopKey(per, item) { return 'shop-' + periodKey(per) + '-' + per + item; }
 function periodKey(per) { const ds = todayStr(); return per === 'monthly' ? ds.slice(0, 7) : dateAdd(ds, -new Date(ds + 'T12:00:00Z').getUTCDay()); }
@@ -489,11 +529,12 @@ function viewTrain() {
     const lt = S.libTab || tabs[0];
     h += '<h2>Library</h2><div class="seg" role="tablist">' + tabs.map((t) => '<button role="tab" aria-selected="' + (t === lt) + '" class="' + (t === lt ? 'on' : '') + '" data-act="ltab" data-t="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div><div class="hs">';
     d.library.filter((l) => l.tab === lt).forEach((l) => {
-      const c = LIB_COL[l.tab] || ['#6d5ce8', '#22d3ee'];
+      l = Object.assign({}, l);
+      const c = LIB_COL[l.tab] || [['#6d5ce8', '#22d3ee'], ['#14b8a6', '#84cc16'], ['#f43f5e', '#f59e0b'], ['#0ea5e9', '#8b5cf6']][[...l.tab].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 4];
       h += '<a class="lib" href="' + esc(l.url) + '" target="_blank" rel="noopener"><div class="th" style="--a:' + c[0] + ';--b:' + c[1] + '"><span>' + ICON(I.play) + '</span></div><div class="lb"><b>' + esc(l.title) + '</b><span class="mut">' + esc(l.creator) + '</span></div></a>';
     });
-    h += '</div>';
-  }
+    h += '<button class="lib add" data-act="inspsheet"><div class="th"><span>' + ICON(I.plus) + '</span></div><div class="lb"><b>Add a reel or TikTok</b><span class="mut">Paste a link</span></div></button></div>';
+  } else h += '<h2>Library</h2><button class="card empty-s" data-act="inspsheet" style="width:100%;text-align:left"><b>Add reels and TikToks that inspire you</b><p class="mut small" style="margin:4px 0 0">They show up here, sorted by category.</p></button>';
   h += '<h2>Strava · last 14 days</h2>';
   if (!d.strava.length) h += '<div class="card mut">No activities yet. Connect Strava in More.</div>';
   else {
@@ -551,6 +592,11 @@ function viewMore() {
   const d = d0(), c = d.cfg, lastB = d.logs.Body[d.logs.Body.length - 1];
   const st = (on) => '<span class="pill ' + (on ? 'keep' : 'swap') + '">' + (on ? 'Connected' : 'Connect') + '</span>';
   let h = '<header class="top"><div><p class="date">Apex</p><h1>More</h1></div></header>' + syncBanner();
+  const ints = d.interests.map((i) => i.name);
+  h += '<h2>Your plan inputs</h2><div class="card plan-in"><p class="mut small" style="margin:0 0 4px">Everything here goes into your next month\'s plan.</p></div><div class="card list">' +
+    row({ act: 'docsheet', ic: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>', bg: '#ef4444', t: 'Program documents', s: d.docs.length ? d.docs.length + ' uploaded' : 'Upload PDFs, plans, notes', end: d.docs.length ? '<span class="count">' + d.docs.length + '</span>' : '' }) +
+    row({ act: 'inspsheet', ic: I.play, bg: '#d6249f', t: 'Reels and TikToks', s: d.library.length + ' saved · add what inspires you', end: '<span class="count">' + d.library.length + '</span>' }) +
+    row({ act: 'intsheet', ic: '<path d="m3 20 6-11 4 6 3-4 5 9z"/><circle cx="17" cy="6" r="2"/>', bg: '#14b8a6', t: 'Sports I\'m into', s: ints.length ? esc(ints.slice(0, 3).join(', ')) + (ints.length > 3 ? ' +' + (ints.length - 3) : '') : 'e.g. rock climbing, swimming', end: ints.length ? '<span class="count">' + ints.length + '</span>' : '' }) + '</div>';
   h += '<h2>Data</h2><div class="card list">' +
     row({ act: 'sync', ic: I.sync, bg: 'var(--accFill)', t: S.busy ? 'Syncing…' : 'Sync now', s: 'Last good sync: ' + esc(ago(c.last_sync_ok)) }) +
     row({ act: 'cw', ic: I.link, bg: '#111', t: 'WHOOP', s: 'Recovery, strain and sleep · read-only', end: st(d.connected.whoop) }) +
@@ -610,7 +656,8 @@ document.addEventListener('click', async (ev) => {
   const a = el.dataset.act;
   // B14: ignore a second tap that lands within 0.8 s on a logging button
   if (LOG_ACTS.includes(a)) { const t = Date.now(); if (t - S.lastTap < 800) return; S.lastTap = t; }
-  if (el.closest('.modal.info') && !el.closest('[data-close]') && a !== 'extick') closeSheets();
+  const KEEP = ['extick', 'icpick', 'inspsave', 'inspdel', 'intadd', 'intaddc', 'intdel'];
+  if (el.closest('.modal.info') && !el.closest('[data-close]') && KEEP.indexOf(a) < 0) closeSheets();
   const ds = todayStr(), ses = S.data && sessionFor(ds);
   const timeVal = () => { const i = $('#mt'); return (i && /^\d{2}:\d{2}$/.test(i.value) && i.value) || nowTime(); };
   const kcalField = (label) => ({ label: label || 'Calories (kcal)', type: 'number', attrs: 'inputmode="numeric" min="0" max="5000"', check: range('Calories', LIM.kcal[0], LIM.kcal[1]) });
@@ -672,6 +719,28 @@ document.addEventListener('click', async (ev) => {
     }
     case 'evdel': if (confirm('Delete ' + el.dataset.n + '?')) send({ action: 'del', table: 'Events', row: { name: el.dataset.n, date: el.dataset.d } }); break;
     case 'msheet': mealSheet(el.dataset.slot); break;
+    case 'docsheet': infoSheet('Program documents', docsBody(), 'docs'); break;
+    case 'inspsheet': infoSheet('Reels and TikToks', inspBody(), 'insp'); break;
+    case 'intsheet': infoSheet('Sports I\'m into', interestsBody(), 'ints'); break;
+    case 'icpick': { const i = $('#ic'); if (i) i.value = el.dataset.v; break; }
+    case 'inspsave': {
+      const u = ($('#il').value || '').trim(), cat = ($('#ic').value || '').trim(), note = ($('#in').value || '').trim(), err = $('#ierr');
+      if (!/^https?:\/\/\S+$/i.test(u)) { err.textContent = 'Paste a full link that starts with https://'; break; }
+      if (!cat) { err.textContent = 'Pick or type a category'; break; }
+      if (S.data.library.some((l) => l.url === u)) { err.textContent = 'You already saved this link'; break; }
+      const pf = platformOf(u);
+      send({ action: 'log', table: 'Library', row: { tab: cat.slice(0, 40), title: (note || pf + ' video').slice(0, 120), creator: pf, url: u, note: note } });
+      refreshSheet('insp', inspBody()); toast('Saved to ' + cat); break;
+    }
+    case 'inspdel': send({ action: 'del', table: 'Library', row: { url: el.dataset.u } }); refreshSheet('insp', inspBody()); break;
+    case 'intadd': case 'intaddc': {
+      const n = a === 'intadd' ? el.dataset.n : ($('#ia').value || '').trim();
+      if (!n) break;
+      if (S.data.interests.some((i) => i.name.toLowerCase() === n.toLowerCase())) { toast(n + ' is already in your list'); break; }
+      send({ action: 'log', table: 'Interests', row: { name: n.slice(0, 40), added: todayStr(), note: '' } });
+      refreshSheet('ints', interestsBody()); break;
+    }
+    case 'intdel': send({ action: 'del', table: 'Interests', row: { name: el.dataset.n } }); refreshSheet('ints', interestsBody()); break;
     case 'extick': {
       const on = LS.getItem(el.dataset.k) !== '1'; LS.setItem(el.dataset.k, on ? '1' : '0');
       el.classList.toggle('on', on); el.setAttribute('aria-pressed', on);
@@ -702,7 +771,21 @@ document.addEventListener('click', async (ev) => {
     }
   }
 });
+async function uploadFiles(files) {
+  for (const f of files) {
+    if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB', 3500); continue; }
+    S.uploading = f.name; refreshSheet('docs', docsBody());
+    try {
+      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
+      const j = await call({ action: 'upload', name: f.name, mime: f.type || 'application/octet-stream', data });
+      S.data.docs.push(j.doc); save(); toast('Uploaded ' + f.name);
+    } catch (e) { toast(e.message === 'offline' ? 'You are offline. Try again when connected.' : 'Upload failed: ' + e.message, 4000); }
+    S.uploading = null; refreshSheet('docs', docsBody());
+  }
+  render();
+}
 document.addEventListener('change', (ev) => {
+  if (ev.target.id === 'docfile' && ev.target.files.length) { uploadFiles([...ev.target.files]); return; }
   const el = ev.target.closest('[data-shop]'); if (!el) return;
   LS.setItem(el.dataset.shop, el.checked ? '1' : '0'); render();
 });
