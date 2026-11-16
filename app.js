@@ -116,7 +116,7 @@ function planFor(ds, day) { return D().plan.find((p) => String(p.week) === Strin
 function mealsFor(daytype) { return D().meals.filter((m) => m.daytype === daytype); }
 function targetFor(daytype) { return D().targets.find((t) => t.daytype === daytype) || {}; }
 function whoopFor(ds) { return D().whoop.find((w) => w.date === ds); }
-function verdictChoice(ds) { const v = D().verdicts.find((x) => x.id === 'verdict-' + ds); return v ? v.status : null; }
+function verdictChoice(ds) { const v = D().verdicts.find((x) => x.id === 'verdict-' + ds); return v && (v.status === 'accepted' || v.status === 'rejected') ? v.status : null; }
 
 // B6 / B7: what you actually train after accepting a verdict
 function sessionFor(ds) {
@@ -188,210 +188,365 @@ const validDate = (opt) => (v) => {
   return /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(new Date(v + 'T12:00:00Z')) ? '' : 'Pick a valid date';
 };
 
-/* ---------- views ---------- */
+/* ---------- views (v6: glanceable, tap-first home) ---------- */
 const d0 = () => S.data;
+const DOW_L = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function niceDate(ds) { const d = new Date(ds + 'T12:00:00Z'); return DOW_L[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; }
+function greeting() { const h = local().hour; return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
+const ICON = (d, cls) => '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const I = {
+  today: '<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.5 12 8l3.5 6.5"/>',
+  meals: '<path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8a2 2 0 0 1-2 2M9 3v6"/><path d="M17 21V3c-2 1.5-3 4-3 7v3h3"/>',
+  train: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
+  insights: '<path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-7"/>',
+  more: '<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>',
+  sync: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>',
+  drop: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  run: '<circle cx="14" cy="4.5" r="1.8"/><path d="m6 21 3.5-6 3 2.5V22M9 11l2.5-3.5 3.5 2 2 3.5h3M11.5 7.5 9 6l-3 2"/>',
+  scale: '<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M9 10a3 3 0 0 1 6 0"/><path d="m12 10 1.5-1.5"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+  out: '<path d="M15 4h4v16h-4M10 17l5-5-5-5M15 12H3"/>',
+  play: '<path d="M8 5v14l11-7z" fill="currentColor"/>'
+};
+
+function ringSVG(frac, size, sw, stroke) {
+  const r = (size - sw) / 2, C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac || 0)), off = (C * (1 - f)).toFixed(1), c = size / 2;
+  return '<svg class="rs" viewBox="0 0 ' + size + ' ' + size + '" aria-hidden="true"><circle class="trk" cx="' + c + '" cy="' + c + '" r="' + r + '" stroke-width="' + sw + '"/>' +
+    (f > 0 ? '<circle class="val" cx="' + c + '" cy="' + c + '" r="' + r + '" stroke-width="' + sw + '" stroke="' + stroke + '" stroke-dasharray="' + C.toFixed(1) + '" stroke-dashoffset="' + off + '" style="--c:' + C.toFixed(1) + '"/>' : '') + '</svg>';
+}
+const cnt = (v, dec) => '<span data-count="' + v + '" data-dec="' + (dec || 0) + '">' + Number(v).toFixed(dec || 0) + '</span>';
+
+function kcalEaten(ms, ml) {
+  return ml.reduce((a, r) => {
+    if (r.status === 'skipped') return a;
+    if (r.status === 'extra' || r.status === 'swap') return a + (Number(r.kcal) || 0);
+    const m = ms.find((x) => x.slot === r.slot); return a + (m ? Number(m.kcal) || 0 : 0);
+  }, 0);
+}
+function waterInfo(ds) {
+  const c = d0().cfg, bot = Number(c.bottle_ml) || 750, tgt = Number(dow(ds) === 'Sat' ? c.water_target_rest : c.water_target_train) || 4000;
+  const ml = Number((logs('WaterLog', ds)[0] || {}).ml) || 0;
+  return { bot, tgt, ml };
+}
+
 function syncBanner() {
-  const c = D().cfg;
-  const notYet = !d0().connected.whoop || !d0().connected.strava;
-  if (notYet) return '<div class="card infoc"><h3>Connect your apps</h3><p class="mut">Go to More and tap Connect WHOOP and Connect Strava. After that, Apex pulls your data every morning by itself.</p>' + (S.tab !== 'more' ? '<button class="p" style="width:100%;margin-top:16px" data-act="tab" data-t="more">Go to More</button>' : '') + '</div>';
-  if (c.last_sync_error) return '<div class="card warnc" role="alert"><b>Last sync had a problem</b><p class="small" style="margin:4px 0">' + esc(c.last_sync_error) + '</p><p class="mut small">Last good sync: ' + esc(ago(c.last_sync_ok)) + '. If it says reconnect, use More > Connect.</p></div>';
+  const d = d0(), c = d.cfg;
+  if (!d.connected.whoop || !d.connected.strava) {
+    return '<div class="card infoc"><div class="row" style="align-items:flex-start;gap:14px"><span class="li-ic fit" style="background:var(--accFill)">' + ICON(I.link) + '</span><div><h3>Connect your apps</h3><p class="mut">Connect WHOOP and Strava once. Apex then pulls your data every morning by itself.</p></div></div>' +
+      (S.tab !== 'more' ? '<button class="p" style="width:100%;margin-top:16px" data-act="tab" data-t="more">Connect now</button>' : '') + '</div>';
+  }
+  if (c.last_sync_error) return '<div class="card warnc" role="alert"><h3>Sync needs attention</h3><p class="small" style="margin:6px 0">' + esc(c.last_sync_error) + '</p><p class="mut small">Last good sync: ' + esc(ago(c.last_sync_ok)) + '. If it says reconnect, use More.</p></div>';
   return '';
 }
 function tzBanner() {
   let dev = '';
   try { dev = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { /* ignore */ }
   if (!dev || dev === tz()) return '';
-  return '<div class="card mut small">Your phone is on ' + esc(dev) + ' but Apex is using ' + esc(tz()) + '. If you are travelling, change "timezone" in the Config tab.</div>';
+  return '<div class="card mut small">Your phone is on ' + esc(dev) + ' but Apex is using ' + esc(tz()) + '. Travelling? Change "timezone" in the Config tab.</div>';
 }
-function greeting() { const h = local().hour; return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
 
+function tiles(w) {
+  const T = [['HRV', 'hrv', 'ms', 1, 0], ['Resting HR', 'rhr', 'bpm', -1, 0], ['Sleep', 'sleep_hours', 'h', 1, 1]];
+  return '<div class="tiles">' + T.map(([lbl, k, u, good, dec]) => {
+    const v = Number(w[k]);
+    const hist = d0().whoop.filter((x) => x.date < w.date).slice(-30).map((x) => Number(x[k])).filter((x) => x > 0);
+    const avg = hist.length >= 3 ? hist.reduce((a, b) => a + b, 0) / hist.length : null;
+    let dl = '<span class="dl">30-day avg —</span>';
+    if (avg && v) {
+      const diff = v - avg, flat = Math.abs(diff) < avg * 0.03, cls = flat ? '' : (diff > 0 ? 1 : -1) * good > 0 ? 'up' : 'down';
+      dl = '<span class="dl ' + cls + '">' + (flat ? '● normal' : (diff > 0 ? '▲ ' : '▼ ') + Math.abs(diff).toFixed(dec)) + '</span>';
+    }
+    return '<div class="tile"><span class="tl-l">' + lbl + '</span><b>' + (v ? cnt(v, dec) : '–') + '<small> ' + u + '</small></b>' + dl + '</div>';
+  }).join('') + '</div>';
+}
+
+function heroCard(ds, w, ch, ses) {
+  const d = d0(), p = ses && ses.p;
+  const rec = w && w.verdict ? Number(w.recovery) || 0 : null;
+  const v = w && w.verdict ? w.verdict : 'none';
+  const V = {
+    keep: ['✓', 'Good to go', 'Recovery ' + rec + '%. Do the full session as planned.'],
+    reduce: ['↓', 'Do it, but go lighter', 'Recovery ' + rec + '%. Drop the last block and use about 80% of your weights.'],
+    swap: ['⇄', 'Change it today', 'Recovery ' + rec + '%. Skip this session and do Active Recovery instead.'],
+    none: ['?', d.connected.whoop ? 'Waiting for your score' : 'No recovery data', d.connected.whoop ? 'WHOOP scores you after you wake. Train as planned, or tap sync to check.' : 'Connect WHOOP in More to get a daily go / change decision.']
+  }[v];
+  if (ch === 'accepted' && v === 'swap') { V[0] = '⇄'; V[1] = 'Switched to recovery'; V[2] = 'Recovery ' + rec + '%. Today is Active Recovery instead of ' + p.session + '.'; }
+  if (ch === 'accepted' && v === 'reduce') { V[1] = 'Lighter session set'; V[2] = 'Last block removed. Use about 80% of your weights.'; }
+  if (ch === 'rejected') { V[2] = 'You chose the full plan. Recovery ' + rec + '%, so listen to your body and stop if something feels off.'; }
+  const wl = p && logs('WorkoutLog', ds).find((r) => r.session === ses.name);
+  const blocks = ses ? (String(ses.details).match(/^#\s*Block/gim) || []).length : 0;
+  const load = ses ? (ses.mode === 'swap' ? 'Recovery' : p.load) : '';
+  let h = '<section class="card hero v-' + v + '" aria-label="Today: ' + esc(V[1]) + '">' +
+    '<div class="hero-top"><div class="hring" role="img" aria-label="' + (rec === null ? 'No recovery score' : 'Recovery ' + rec + ' percent') + '">' + ringSVG(rec === null ? 0 : rec / 100, 76, 8, 'url(#rg)') + '<div class="hero-num xs"><b>' + (rec === null ? '--' : cnt(rec)) + '</b><span>REC</span></div></div>' +
+    '<div class="hero-ses"><span class="eyebrow3">Today\'s workout</span>' + (ses ? '<h3>' + esc(ses.name) + '</h3><p class="mut small"><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span> ' + esc(p.time) + (blocks ? ' · ' + blocks + ' blocks' : '') + '</p>' : '<h3>Rest day</h3>') + '</div></div>' +
+    '<div class="vbox"><span class="vic" aria-hidden="true">' + V[0] + '</span><div><b>' + esc(V[1]) + '</b><span>' + esc(V[2]) + '</span></div></div>';
+  if (w && w.verdict) h += tiles(w);
+  if (ses) {
+    if (v !== 'keep' && v !== 'none' && !ch) h += '<div class="row hero-act"><button class="p" data-act="vacc">Accept</button><button data-act="vrej">Keep plan</button></div>';
+    else if (wl) h += '<div class="row sp hero-act"><span class="pill ' + (wl.status === 'done' ? 'keep' : 'swap') + '">' + esc(wl.status.toUpperCase()) + ' · ' + esc(wl.time) + '</span><button class="txt fit" data-act="wundo">Undo</button></div>';
+    else h += '<div class="row hero-act"><button class="g" data-act="wdone">Did it</button><button data-act="wskip">Skipped</button></div>';
+    if (ch) h += '<p class="chosen">' + (ch === 'accepted' ? 'Plan adjusted for today' : 'Keeping the original plan') + ' · <button class="txt" data-act="vundo">Change</button></p>';
+    h += '<button class="link-row" data-act="ssheet">View full session<span class="chev">›</span></button>';
+  }
+  if (w && w.reason) h += '<details class="why"><summary>Why this decision?</summary><p>' + esc(w.reason) + '</p></details>';
+  return h + '</section>';
+}
+function miniRing(key, label, val, tgt, unit, stroke, txt) {
+  return '<button class="mr" data-act="jump" data-k="' + key + '" aria-label="' + label + ' ' + txt + '"><div class="rw">' + ringSVG(tgt ? val / tgt : 0, 64, 7, stroke) + '<b>' + Math.round(tgt ? Math.min(999, (val / tgt) * 100) : 0) + '%</b></div><span>' + label + '</span><em>' + txt + '</em></button>';
+}
+
+const ST_ICON = { ate: '✓', swap: '↺', extra: '+', skipped: '✕', next: '•', todo: '' };
 function viewToday() {
-  const ds = todayStr(), d = D(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p;
-  const w = whoopFor(ds), ch = verdictChoice(ds);
-  let h = '<div class="eyebrow"><img src="icon-192.png" alt="" class="mark">APEX</div><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1><p class="sub">' + dow(ds) + ' ' + ds + (p ? ' · Week ' + p.week : '') +
-    ' · ' + (S.busy ? 'syncing...' : 'updated ' + esc(ago(c.last_sync_ok))) + (S.queue.length ? ' · ' + S.queue.length + ' waiting to upload' : '') + '</p>';
+  const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p, w = whoopFor(ds), ch = verdictChoice(ds);
+  const synced = c.last_sync_ok ? ago(c.last_sync_ok).replace('today ', '') : 'Sync';
+  let h = '<header class="top"><div><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1></div>' +
+    '<button class="chip-btn' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync now. Last synced ' + esc(synced) + '">' + ICON(I.sync) + '<span>' + (S.busy ? 'Syncing' : esc(synced)) + '</span></button></header>';
   h += syncBanner() + tzBanner();
+  h += heroCard(ds, w, ch, ses);
+  if (!p) return h;
 
-  if (w && w.verdict) {
-    const rec = Number(w.recovery) || 0;
-    const msg = { keep: 'Train as planned', reduce: 'Go lighter today', swap: 'Recovery day' }[w.verdict];
-    const how = { keep: 'Your body is ready. Full session.', reduce: 'Last block removed and about 80% of your weights.', swap: 'Swap today\'s session for Active Recovery.' }[w.verdict];
-    const off = (326.7 * (1 - Math.min(100, Math.max(0, rec)) / 100)).toFixed(1);
-    h += '<section class="card hero" aria-label="Today verdict"><div class="hero-row"><div class="ring" role="img" aria-label="Recovery ' + rec + ' percent"><svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="val" cx="60" cy="60" r="52" style="--off:' + off + '"/></svg><div class="ring-num"><b>' + rec + '</b><span>%</span></div></div>' +
-      '<div><span class="pill ' + w.verdict + '">' + w.verdict.toUpperCase() + '</span><h3>' + esc(msg) + '</h3><p class="mut small" style="margin:0">' + esc(how) + '</p></div></div><p class="mut">' + esc(w.reason) + '</p>';
-    if (w.verdict !== 'keep' && !ch) h += '<div class="row" style="margin-top:20px"><button class="g" data-act="vacc">Accept</button><button data-act="vrej">Keep plan</button></div>';
-    else if (ch) h += '<p class="mut small">You chose: ' + (ch === 'accepted' ? 'accept the change' : 'keep the original plan') + ' <button class="sm" data-act="vundo">Change</button></p>';
-    h += '</section>';
-  } else {
-    const last = d.whoop[d.whoop.length - 1];
-    h += '<div class="card"><h3>No WHOOP score for today yet</h3><p class="mut">It appears after you wake and WHOOP syncs. Tap Sync now in More.' + (last ? ' Last score: ' + esc(last.recovery) + '% on ' + esc(last.date) + ' (' + daysBetween(last.date, ds) + ' day(s) old).' : '') + '</p></div>';
-  }
+  const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), tg = targetFor(p.daytype);
+  const eaten = kcalEaten(ms, ml), kT = Number(tg.kcal) || 0, W = waterInfo(ds);
+  h += '<div class="rings3">' +
+    miniRing('meals', 'Fuel', eaten, kT, 'kcal', 'url(#gk)', eaten + ' / ' + kT) +
+    miniRing('water', 'Water', W.ml, W.tgt, 'L', 'url(#gw)', (W.ml / 1000).toFixed(1) + ' / ' + (W.tgt / 1000).toFixed(1) + ' L') +
+    miniRing('insights', 'Sleep', w ? Number(w.sleep_perf) || 0 : 0, 100, '%', 'url(#gt)', w && w.sleep_hours ? esc(w.sleep_hours) + ' h' : 'No data') + '</div>';
 
-  if (p) {
-    const wl = logs('WorkoutLog', ds).find((r) => r.session === ses.name);
-    h += '<h2>Workout</h2><div class="card"><h3>' + esc(ses.name) + '</h3><p class="mut">' + esc(ses.mode === 'swap' ? 'Recovery' : p.load) + ' · ' + esc(p.time) + '</p>';
-    if (wl) h += '<p><span class="pill keep">' + esc(wl.status) + '</span> ' + esc(wl.time) + ' <button class="sm" data-act="wundo">Undo</button></p>';
-    else h += '<div class="row"><button class="g" data-act="wdone">Did it</button><button data-act="wskip">Skipped</button></div>';
-    h += '<details style="margin-top:12px"' + (ses.mode !== 'plan' ? ' open' : '') + '><summary class="mut">See the full session</summary><div class="det">' + parseDetails(ses.details) + '</div></details></div>';
+  // up next
+  const next = ms.find((m) => !ml.find((r) => r.slot === m.slot));
+  h += '<h2 id="sec-meals">Meals</h2>';
+  if (next) {
+    h += '<section class="card upnext' + (S.flash === 'meal' ? ' pop' : '') + '"><div class="eyebrow2"><span>UP NEXT</span><span>' + esc(next.time) + '</span></div><h3>' + esc(next.name) + '</h3><p class="mut">' + esc(next.items) + '</p>' +
+      (next.supps ? '<p class="supps">Supplements · ' + esc(next.supps) + '</p>' : '') +
+      '<div class="row" style="margin-top:20px"><button class="g" data-act="mate" data-slot="' + esc(next.slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(next.slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(next.slot) + '">Swap</button></div></section>';
+  } else h += '<section class="card upnext done"><div class="eyebrow2"><span>ALL DONE</span></div><h3>Every meal logged today</h3><p class="mut">' + eaten + ' kcal so far. Nice work.</p></section>';
+  // day timeline
+  h += '<div class="tl" role="list" aria-label="Today\'s meals">' + ms.map((m) => {
+    const r = ml.find((x) => x.slot === m.slot), st = r ? r.status : m === next ? 'next' : 'todo';
+    return '<button role="listitem" class="tl-i ' + st + '" data-act="msheet" data-slot="' + esc(m.slot) + '" aria-label="' + esc(m.name) + ', ' + (r ? r.status : 'not logged') + '"><span class="tl-t">' + esc(r && r.time ? r.time : m.time) + '</span><span class="tl-ic">' + ST_ICON[st] + '</span><span class="tl-n">' + esc(m.name.replace('Morning protocol', 'Morning').replace(' + soup', '')) + '</span></button>';
+  }).join('') + ml.filter((r) => r.status === 'extra').map((r) => '<button role="listitem" class="tl-i extra" data-act="msheet" data-slot="' + esc(r.slot) + '"><span class="tl-t">' + esc(r.time) + '</span><span class="tl-ic">+</span><span class="tl-n">' + esc(r.extra_name) + '</span></button>').join('') +
+    '<button class="tl-i add" data-act="mextra" aria-label="Add a snack"><span class="tl-t">&nbsp;</span><span class="tl-ic">' + ICON(I.plus) + '</span><span class="tl-n">Snack</span></button></div>';
 
-    const ms = mealsFor(p.daytype), ml = logs('MealLog', ds);
-    const done = ms.filter((m) => ml.find((r) => r.slot === m.slot));
-    const next = ms.find((m) => !ml.find((r) => r.slot === m.slot));
-    h += '<h2>Meals</h2><div class="card' + (S.flash === 'meal' ? ' pop' : '') + '">';
-    done.forEach((m) => {
-      const r = ml.find((x) => x.slot === m.slot);
-      h += '<div class="done-m row sp"><span>✓ ' + esc(m.name) + ' · ' + esc(r.status) + (r.note ? ' (' + esc(r.note) + ')' : '') + (r.time ? ' at ' + esc(r.time) : '') + '</span><button class="sm fit" data-act="mundo" data-slot="' + esc(m.slot) + '" aria-label="Undo ' + esc(m.name) + '">Undo</button></div>';
-    });
-    if (next) {
-      h += '<div style="margin-top:16px"><span class="mut small">Planned ' + esc(next.time) + '</span><h3>' + esc(next.name) + '</h3><p style="margin:2px 0 6px">' + esc(next.items) + '</p>' +
-        (next.supps ? '<p class="mut small">Supplements: ' + esc(next.supps) + '</p>' : '') +
-        '<label for="mt" class="mut small" style="margin:16px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '">' +
-        '<div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(next.slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(next.slot) + '">Skipped</button><button data-act="mswap" data-slot="' + esc(next.slot) + '">Swap</button></div></div>';
-    } else h += '<p><b>All meals logged for today.</b></p>';
-    ml.filter((r) => r.status === 'extra').forEach((r) => (h += '<div class="done-m row sp"><span>+ ' + esc(r.extra_name) + ' · ' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</span><button class="sm fit" data-act="mundo" data-slot="' + esc(r.slot) + '" aria-label="Delete ' + esc(r.extra_name) + '">Delete</button></div>'));
-    h += '<button class="sm" style="margin-top:20px;width:100%" data-act="mextra">+ Extra meal or snack</button>';
-    const tg = targetFor(p.daytype);
-    const eaten = ml.reduce((a, r) => {
-      if (r.status === 'skipped') return a;
-      if (r.status === 'extra' || r.status === 'swap') return a + (Number(r.kcal) || 0);
-      const m = ms.find((x) => x.slot === r.slot); return a + (m ? Number(m.kcal) || 0 : 0);
-    }, 0);
-    const pct = Math.min(100, (eaten / (Number(tg.kcal) || 1)) * 100);
-    h += '<p class="mut small" style="margin:24px 0 4px">' + eaten + ' / ' + esc(tg.kcal || '?') + ' kcal · protein target ' + esc(tg.protein || '?') + ' g' + (eaten > Number(tg.kcal) ? ' · over target' : '') + '</p><div class="bar" role="img" aria-label="' + Math.round(pct) + ' percent of calories"><i style="width:' + pct + '%"></i></div></div>';
-  }
+  // water
+  const pct = W.tgt ? Math.min(100, (W.ml / W.tgt) * 100) : 0;
+  h += '<h2 id="sec-water">Water</h2><section class="card water' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp" style="align-items:baseline"><div><span class="big">' + cnt(W.ml / 1000, 2) + '</span><span class="unit"> / ' + (W.tgt / 1000).toFixed(1) + ' L</span></div><span class="mut small">' + (W.ml >= W.tgt ? 'Goal reached ✓' : Math.round(pct) + '%') + '</span></div>' +
+    '<div class="bar wbar" role="img" aria-label="' + Math.round(pct) + ' percent of water goal"><i style="width:' + pct + '%"></i></div>' +
+    '<div class="row" style="margin-top:20px"><button class="icon-btn" data-act="wminus" aria-label="Remove one bottle" ' + (W.ml <= 0 ? 'disabled' : '') + '>−</button><button class="p" data-act="wplus">' + ICON(I.drop, 'ib') + ' Add ' + W.bot + ' ml</button></div></section>';
 
-  const bot = Number(c.bottle_ml) || 750, tgt = Number(dow(ds) === 'Sat' ? c.water_target_rest : c.water_target_train) || 4000;
-  const wr = logs('WaterLog', ds)[0], ml2 = wr ? Number(wr.ml) : 0, n = Math.ceil(tgt / bot), f = Math.floor(ml2 / bot);
-  h += '<h2>Water</h2><div class="card' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp"><span class="big">' + (ml2 / 1000).toFixed(2) + ' L</span><span class="mut">target ' + (tgt / 1000).toFixed(1) + ' L' + (ml2 >= tgt ? ' · done ✓' : '') + '</span></div><div class="bottles" role="img" aria-label="' + f + ' of ' + n + ' bottles">';
-  for (let i = 0; i < Math.max(n, f); i++) h += '<div class="bt ' + (i < f ? 'f' : '') + '"></div>';
-  h += '</div><div class="row"><button data-act="wminus" aria-label="Remove one bottle" ' + (ml2 <= 0 ? 'disabled' : '') + '>− ' + bot + ' ml</button><button class="p" data-act="wplus" aria-label="Add one bottle">+ ' + bot + ' ml</button></div></div>';
-
+  // check-in
   const ck = logs('Checkin', ds)[0];
-  h += '<h2>How do you feel?</h2><div class="card row" role="group" aria-label="How do you feel">' + ['Fresh', 'OK', 'Tired'].map((x) => '<button class="' + (ck && ck.feel === x ? 'p' : '') + '" aria-pressed="' + !!(ck && ck.feel === x) + '" data-act="feel" data-v="' + x + '">' + x + '</button>').join('') + '</div>';
+  h += '<h2>How do you feel?</h2><div class="feel" role="group" aria-label="How do you feel">' + [['Fresh', '⚡'], ['OK', '🙂'], ['Tired', '😴']].map(([x, e]) =>
+    '<button class="' + (ck && ck.feel === x ? 'on' : '') + '" aria-pressed="' + !!(ck && ck.feel === x) + '" data-act="feel" data-v="' + x + '"><span class="em" aria-hidden="true">' + e + '</span>' + x + '</button>').join('') + '</div>';
   return h;
 }
 
+/* ---------- sheets ---------- */
+function infoSheet(title, body) {
+  closeSheets(true);
+  const m = document.createElement('div');
+  m.className = 'modal info';
+  m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', title);
+  m.innerHTML = '<div class="sheet"><div class="sheet-h"><h3>' + esc(title) + '</h3><button class="icon-btn x" data-close aria-label="Close">✕</button></div>' + body + '</div>';
+  S.lastFocus = document.activeElement;
+  document.body.appendChild(m);
+  setTimeout(() => { const f = m.querySelector('input,[data-close]'); if (f) f.focus(); }, 60);
+  m.addEventListener('click', (ev) => { if (ev.target === m || ev.target.closest('[data-close]')) closeSheets(); });
+}
+function closeSheets(now) {
+  const open = document.querySelectorAll('.modal.info');
+  open.forEach((m) => { if (now) { m.remove(); return; } m.classList.add('closing'); setTimeout(() => m.remove(), 220); });
+  if (open.length && !now && S.lastFocus && document.body.contains(S.lastFocus)) { try { S.lastFocus.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+}
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape') return;
+  const f = document.querySelector('.modal:not(.info):not(.closing) [data-f="cancel"]');
+  if (f) { f.click(); return; }
+  closeSheets();
+});
+function mealSheet(slot) {
+  const ds = todayStr(), p = planFor(ds); if (!p) return;
+  const m = mealsFor(p.daytype).find((x) => x.slot === slot), r = logs('MealLog', ds).find((x) => x.slot === slot);
+  if (!m) { if (r) infoSheet(r.extra_name || 'Snack', '<p class="mut">' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</p><button class="r" style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Delete</button>'); return; }
+  let b = '<p class="mut small">Planned ' + esc(m.time) + ' · ' + esc(m.kcal) + ' kcal</p><p style="margin:12px 0">' + esc(m.items) + '</p>' + (m.supps ? '<p class="supps">Supplements · ' + esc(m.supps) + '</p>' : '');
+  if (r) b += '<div class="row sp" style="margin-top:20px"><span class="pill ' + (r.status === 'skipped' ? 'swap' : 'keep') + '">' + esc(r.status.toUpperCase()) + (r.time ? ' · ' + esc(r.time) : '') + '</span>' + (r.note ? '<span class="mut small">' + esc(r.note) + '</span>' : '') + '</div><button style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Undo</button>';
+  else b += '<label for="mt" class="mut small" style="margin:20px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '"><div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(slot) + '">Swap</button></div>';
+  infoSheet(m.name, b);
+}
+function blocksHTML(txt) {
+  const secs = []; let cur = null;
+  String(txt || '').split('\n').forEach((l) => {
+    l = l.trim(); if (!l) return;
+    if (l[0] === '#') { cur = { h: l.replace(/^#\s*/, ''), items: [] }; secs.push(cur); }
+    else { if (!cur) { cur = { h: 'Session', items: [] }; secs.push(cur); } cur.items.push(l.replace(/^-\s*/, '')); }
+  });
+  return '<div class="det">' + secs.map((s, i) => '<details class="blk"' + (i < 2 ? ' open' : '') + '><summary><span class="bn">' + (i + 1) + '</span><span class="bt-t">' + esc(s.h) + '</span><span class="cnt">' + s.items.length + '</span></summary><ul>' + s.items.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul></details>').join('') + '</div>';
+}
+function parseDetails(txt) { return blocksHTML(txt); }
+
+/* ---------- Meals ---------- */
+function shopKey(per, item) { return 'shop-' + periodKey(per) + '-' + per + item; }
 function periodKey(per) { const ds = todayStr(); return per === 'monthly' ? ds.slice(0, 7) : dateAdd(ds, -new Date(ds + 'T12:00:00Z').getUTCDay()); }
 function viewMeals() {
-  const ds = todayStr(), p = planFor(ds), d = D();
-  let h = '<h1>Meals</h1>';
+  const ds = todayStr(), p = planFor(ds), d = d0();
+  let h = '<header class="top"><div><p class="date">' + esc(niceDate(ds)) + '</p><h1>Meals</h1></div></header>';
   if (p) {
-    h += '<p class="sub">Today\'s plan · ' + esc(p.session) + ' · ' + esc(p.daytype) + ' day</p>';
-    mealsFor(p.daytype).forEach((m) => { h += '<div class="card"><div class="row sp"><b>' + esc(m.name) + '</b><span class="mut fit">' + esc(m.time) + '</span></div><p style="margin:4px 0">' + esc(m.items) + '</p><p class="mut small">' + esc(m.kcal) + ' kcal' + (m.supps ? ' · ' + esc(m.supps) : '') + '</p></div>'; });
-    const t = targetFor(p.daytype);
-    h += '<div class="card"><b>Targets</b><p class="mut">' + esc(t.kcal) + ' kcal · P ' + esc(t.protein) + ' g · C ' + esc(t.carbs) + ' g · F ' + esc(t.fat) + ' g</p></div>';
+    const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), t = targetFor(p.daytype), eaten = kcalEaten(ms, ml), kT = Number(t.kcal) || 1;
+    h += '<section class="card macro"><div class="macro-ring">' + ringSVG(eaten / kT, 124, 12, 'url(#gk)') + '<div class="hero-num sm"><b>' + cnt(eaten) + '</b><span>of ' + esc(t.kcal) + '</span></div></div><div class="macros">' +
+      [['Protein', t.protein, 'var(--ringA)'], ['Carbs', t.carbs, 'var(--ringC)'], ['Fat', t.fat, '#f59e0b']].map(([n, g, col]) => '<div class="mac"><span class="mut small">' + n + '</span><b>' + esc(g) + ' g</b><i style="background:' + col + '"></i></div>').join('') + '</div></section>';
+    h += '<p class="sub center">' + esc(p.daytype.charAt(0).toUpperCase() + p.daytype.slice(1)) + ' day · ' + esc(p.session) + '</p>';
+    h += '<h2>Today</h2><div class="card list">' + ms.map((m) => {
+      const r = ml.find((x) => x.slot === m.slot), st = r ? r.status : 'todo';
+      return '<button class="li" data-act="msheet" data-slot="' + esc(m.slot) + '"><span class="li-time">' + esc(r && r.time ? r.time : m.time) + '</span><span class="li-dot ' + st + '"></span><span class="li-main"><b>' + esc(m.name) + '</b><span class="mut small">' + esc(m.items) + '</span></span><span class="li-end">' + (Number(m.kcal) ? esc(m.kcal) : '') + '<span class="chev">›</span></span></button>';
+    }).join('') + '<button class="li add" data-act="mextra"><span class="li-time"></span><span class="li-dot plus">+</span><span class="li-main"><b>Add a snack or extra meal</b></span></button></div>';
   }
-  ['weekly', 'monthly'].forEach((per) => {
-    h += '<h2>Shopping, ' + per + (per === 'weekly' ? ' (resets Sunday)' : ' (resets the 1st)') + '</h2><div class="card">';
-    let g = '';
-    d.shopping.filter((s) => s.period === per).forEach((s, i) => {
-      const k = 'shop-' + periodKey(per) + '-' + per + s.item, chk = LS.getItem(k) === '1';
-      if (s.group !== g) { g = s.group; h += '<div class="mut small" style="margin-top:16px">' + esc(g) + '</div>'; }
-      h += '<label class="row" style="padding:12px 0;gap:14px" for="sh' + per + i + '"><input id="sh' + per + i + '" type="checkbox" class="fit chk" data-shop="' + esc(k) + '" ' + (chk ? 'checked' : '') + '><span style="' + (chk ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(s.item) + '</span></label>';
-    });
-    h += '</div>';
+  const per = S.shopPer || 'weekly', items = d.shopping.filter((s) => s.period === per);
+  const got = items.filter((s) => LS.getItem(shopKey(per, s.item)) === '1').length;
+  h += '<h2>Shopping</h2><div class="segc" role="tablist">' + ['weekly', 'monthly'].map((x) => '<button role="tab" aria-selected="' + (x === per) + '" class="' + (x === per ? 'on' : '') + '" data-act="shopper" data-p="' + x + '">' + (x === 'weekly' ? 'Weekly' : 'Monthly') + '</button>').join('') + '</div>';
+  h += '<div class="card"><div class="row sp"><b>' + got + ' of ' + items.length + ' bought</b><span class="mut small">Resets ' + (per === 'weekly' ? 'Sunday' : 'on the 1st') + '</span></div><div class="bar"><i style="width:' + (items.length ? (got / items.length) * 100 : 0) + '%"></i></div>';
+  let g = '';
+  items.forEach((s, i) => {
+    const k = shopKey(per, s.item), chk = LS.getItem(k) === '1';
+    if (s.group !== g) { g = s.group; h += '<div class="grp">' + esc(g) + '</div>'; }
+    h += '<label class="shop" for="sh' + i + '"><input id="sh' + i + '" type="checkbox" class="chk" data-shop="' + esc(k) + '" ' + (chk ? 'checked' : '') + '><span class="' + (chk ? 'got' : '') + '">' + esc(s.item) + '</span></label>';
   });
-  return h;
+  return h + '</div>';
 }
 
+/* ---------- Train ---------- */
+const LIB_COL = { Kettlebell: ['#f97316', '#ef4444'], 'Animal Flow': ['#22c55e', '#14b8a6'], Mobility: ['#38bdf8', '#6366f1'], HYROX: ['#facc15', '#f97316'], Striking: ['#ef4444', '#a855f7'], Grappling: ['#6366f1', '#0ea5e9'] };
 function viewTrain() {
-  const today = todayStr(), d = D();
-  const sel = S.viewDay || today;
+  const today = todayStr(), d = d0(), sel = S.viewDay || today;
   const start = dateAdd(today, -new Date(today + 'T12:00:00Z').getUTCDay());
-  let h = '<h1>Train</h1><div class="wk" role="group" aria-label="This week">';
+  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of 4</p><h1>Train</h1></div></header><div class="wk" role="group" aria-label="This week">';
   for (let i = 0; i < 7; i++) {
     const ds = dateAdd(start, i), done = logs('WorkoutLog', ds).some((r) => r.status === 'done');
-    h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done' : '') + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + ds + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '">' + DAYS[i] + '<br>' + ds.slice(8) + (done ? ' ✓' : '') + '</button>';
+    h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today' : '') + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + ds + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i] + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd"></i></button>';
   }
   h += '</div>';
   const ses = sessionFor(sel);
-  if (ses) h += '<div class="card"><h3>' + esc(ses.name) + '</h3><p class="mut">Week ' + esc(ses.p.week) + ' · ' + esc(ses.p.load) + '</p><div class="det">' + parseDetails(ses.details) + '</div></div>';
+  if (ses) {
+    const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
+    h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' + blocksHTML(ses.details) + '</section>';
+  }
   const tabs = [...new Set(d.library.map((l) => l.tab))];
   if (tabs.length) {
     const lt = S.libTab || tabs[0];
-    h += '<h2>Library</h2><div class="seg" role="group" aria-label="Library categories">' + tabs.map((t) => '<button class="' + (t === lt ? 'on' : '') + '" aria-pressed="' + (t === lt) + '" data-act="ltab" data-t="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div>';
-    d.library.filter((l) => l.tab === lt).forEach((l) => { h += '<a class="card" style="display:block;text-decoration:none;color:inherit" href="' + esc(l.url) + '" target="_blank" rel="noopener"><b>' + esc(l.title) + '</b><div class="mut small">' + esc(l.creator) + ' · ' + esc(l.note) + '</div></a>'; });
+    h += '<h2>Library</h2><div class="seg" role="tablist">' + tabs.map((t) => '<button role="tab" aria-selected="' + (t === lt) + '" class="' + (t === lt ? 'on' : '') + '" data-act="ltab" data-t="' + esc(t) + '">' + esc(t) + '</button>').join('') + '</div><div class="hs">';
+    d.library.filter((l) => l.tab === lt).forEach((l) => {
+      const c = LIB_COL[l.tab] || ['#6d5ce8', '#22d3ee'];
+      h += '<a class="lib" href="' + esc(l.url) + '" target="_blank" rel="noopener"><div class="th" style="--a:' + c[0] + ';--b:' + c[1] + '"><span>' + ICON(I.play) + '</span></div><div class="lb"><b>' + esc(l.title) + '</b><span class="mut">' + esc(l.creator) + '</span></div></a>';
+    });
+    h += '</div>';
   }
-  h += '<h2>Strava, last 14 days (newest first)</h2>';
-  if (!d.strava.length) h += '<div class="card mut">Nothing yet. Connect Strava in More.</div>';
-  d.strava.slice().reverse().forEach((a) => {
-    const km = Number(a.distance_km), min = Number(a.moving_min);
-    let pace = '';
-    if (km > 0.2 && min > 0 && /run|walk|hike/i.test(a.type)) { const secs = Math.round((min * 60) / km); pace = ' · ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0') + ' /km'; }
-    h += '<div class="card"><b>' + esc(a.name) + '</b><div class="mut small">' + esc(a.date) + ' · ' + esc(a.type) + ' · ' + esc(a.distance_km) + ' km · ' + esc(a.moving_min) + ' min' + pace + (a.avg_hr ? ' · ' + esc(a.avg_hr) + ' bpm' : '') + '</div></div>';
-  });
+  h += '<h2>Strava · last 14 days</h2>';
+  if (!d.strava.length) h += '<div class="card mut">No activities yet. Connect Strava in More.</div>';
+  else {
+    h += '<div class="card list">' + d.strava.slice().reverse().map((a) => {
+      const km = Number(a.distance_km), min = Number(a.moving_min); let pace = '';
+      if (km > 0.2 && min > 0 && /run|walk|hike/i.test(a.type)) { const s = Math.round((min * 60) / km); pace = ' · ' + Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0') + ' /km'; }
+      return '<div class="li"><span class="li-ic" style="background:#fc4c02">' + ICON(I.run) + '</span><span class="li-main"><b>' + esc(a.name) + '</b><span class="mut small">' + esc(niceDate(a.date)) + ' · ' + esc(a.distance_km) + ' km · ' + esc(a.moving_min) + ' min' + pace + '</span></span><span class="li-end">' + (a.avg_hr ? esc(a.avg_hr) + ' bpm' : '') + '</span></div>';
+    }).join('') + '</div>';
+  }
   return h;
 }
 
+/* ---------- Insights ---------- */
+const METRICS = { recovery: ['Recovery', '%', 0], hrv: ['HRV', 'ms', 0], sleep_hours: ['Sleep', 'h', 1], rhr: ['Resting HR', 'bpm', 0] };
 function viewInsights() {
-  const d = D(), today = todayStr();
-  let h = '<h1>Insights</h1><h2>Recovery, last 14 days</h2><div class="card">';
-  if (!d.whoop.length) h += '<p class="mut">No WHOOP data yet.</p>';
+  const d = d0(), today = todayStr(), mk = S.metric || 'recovery', M = METRICS[mk];
+  let h = '<header class="top"><div><p class="date">Last 14 days</p><h1>Insights</h1></div></header>';
+  h += '<div class="segc" role="tablist">' + Object.keys(METRICS).map((k) => '<button role="tab" aria-selected="' + (k === mk) + '" class="' + (k === mk ? 'on' : '') + '" data-act="metric" data-m="' + k + '">' + METRICS[k][0] + '</button>').join('') + '</div>';
+  if (!d.whoop.length) h += '<div class="card mut">No WHOOP data yet. Connect WHOOP in More.</div>';
   else {
-    // one column per calendar day, so missing days show as gaps
+    const vals = (n) => d.whoop.slice(-n).map((x) => Number(x[mk])).filter((x) => x > 0);
+    const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const last = d.whoop[d.whoop.length - 1], age = daysBetween(last.date, today);
+    const a7 = avg(vals(7)), a30 = avg(vals(30));
+    h += '<div class="tiles stats">' + [['Latest', Number(last[mk])], ['7-day avg', a7], ['30-day avg', a30]].map(([l, v]) => '<div class="tile"><span class="tl-l">' + l + '</span><b>' + (v ? cnt(v, M[2]) : '–') + '<small> ' + M[1] + '</small></b></div>').join('') + '</div>';
     const cols = [];
     for (let i = 13; i >= 0; i--) { const ds = dateAdd(today, -i); cols.push({ ds, w: whoopFor(ds) }); }
-    h += '<div class="chart" role="img" aria-label="Recovery by day: ' + cols.filter((c) => c.w).map((c) => c.ds.slice(5) + ' ' + c.w.recovery + '%').join(', ') + '">' + cols.map((c) => {
-      const r = c.w ? Number(c.w.recovery) || 0 : 0;
-      return '<div class="col"><span class="v">' + (c.w ? r : '') + '</span><i style="height:' + (c.w ? Math.max(3, Math.round(r * 0.9)) : 0) + 'px;background:' + (r >= 67 ? 'var(--ok)' : r >= 34 ? 'var(--warn)' : 'var(--bad)') + '"></i><span class="d">' + c.ds.slice(8) + '</span></div>';
-    }).join('') + '</div><p class="mut small">Green 67%+ · yellow 34–66% · red 33% and under. Empty column = no score that day.</p>';
-    const last = d.whoop[d.whoop.length - 1], age = daysBetween(last.date, today);
-    h += '<p class="small" style="margin-top:16px">Latest ' + esc(last.date) + (age > 0 ? ' <b class="warnt">(' + age + ' day' + (age > 1 ? 's' : '') + ' old)</b>' : ' (today)') + ': HRV ' + esc(last.hrv) + ' ms · RHR ' + esc(last.rhr) + ' · sleep ' + esc(last.sleep_hours) + ' h (' + esc(last.sleep_perf) + '%) · strain ' + esc(last.strain) + '</p>';
+    const max = mk === 'recovery' ? 100 : Math.max(1, ...cols.map((c) => (c.w ? Number(c.w[mk]) || 0 : 0))) * 1.1;
+    h += '<section class="card"><div class="chart" role="img" aria-label="' + M[0] + ' by day: ' + cols.filter((c) => c.w).map((c) => c.ds.slice(5) + ' ' + c.w[mk]).join(', ') + '">' + cols.map((c) => {
+      const v = c.w ? Number(c.w[mk]) || 0 : 0, r = Number(c.w && c.w.recovery) || 0;
+      const col = mk === 'recovery' ? (r >= 67 ? 'var(--ok)' : r >= 34 ? 'var(--warn)' : 'var(--bad)') : 'linear-gradient(180deg,var(--acc),var(--accFill))';
+      return '<div class="col' + (c.ds === today ? ' now' : '') + '"><span class="v">' + (c.w ? (M[2] ? v.toFixed(1) : Math.round(v)) : '') + '</span><i style="height:' + (c.w ? Math.max(3, Math.round((v / max) * 96)) : 0) + 'px;background:' + col + '"></i><span class="d">' + Number(c.ds.slice(8)) + '</span></div>';
+    }).join('') + '</div><p class="mut small">' + (mk === 'recovery' ? 'Green 67%+ · yellow 34–66% · red 33% and under. ' : '') + 'Empty column = no data that day.' + (age > 0 ? ' <b class="warnt">Latest data is ' + age + ' day' + (age > 1 ? 's' : '') + ' old.</b>' : '') + '</p></section>';
   }
-  h += '</div><h2>Suggested changes</h2>';
-  if (!d.suggestions.length) h += '<div class="card mut">Nothing waiting. Any change to your plan shows up here first, and nothing changes until you accept it.</div>';
-  d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
-  const b = d.logs.Body.slice(-10).reverse();
-  h += '<h2>Weight</h2><div class="card">' + (b.length ? b.map((x) => '<div class="row sp small"><span>' + esc(x.date) + '</span><span class="fit">' + esc(x.weight) + ' kg' + (x.waist ? ' · waist ' + esc(x.waist) + ' cm' : '') + '</span></div>').join('') : '<p class="mut">No entries yet.</p>') + '</div>';
-  if (S.failed.length) {
-    h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:16px" data-act="clearfail">Clear</button></div>';
-  }
+  h += '<h2>Suggested changes</h2>';
+  if (!d.suggestions.length) h += '<div class="card empty-s"><p class="mut">Nothing waiting. Any change to your plan shows up here first, and nothing changes until you accept it.</p></div>';
+  d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
+  const b = d.logs.Body.slice(-8).reverse();
+  h += '<h2>Weight</h2>';
+  if (!b.length) h += '<div class="card mut">No entries yet. Log your weight in More.</div>';
+  else h += '<div class="card list">' + b.map((x, i) => {
+    const prev = b[i + 1], dlt = prev ? Number(x.weight) - Number(prev.weight) : 0;
+    return '<div class="li"><span class="li-main"><b>' + esc(x.weight) + ' kg</b><span class="mut small">' + esc(niceDate(x.date)) + (x.waist ? ' · waist ' + esc(x.waist) + ' cm' : '') + '</span></span><span class="li-end ' + (dlt < 0 ? 'okt' : dlt > 0 ? 'badt' : '') + '">' + (prev ? (dlt > 0 ? '+' : '') + dlt.toFixed(1) : '') + '</span></div>';
+  }).join('') + '</div>';
+  if (S.failed.length) h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small" style="padding:6px 0">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:12px" data-act="clearfail">Clear</button></div>';
   return h;
 }
 
+/* ---------- More ---------- */
+function row(o) {
+  return '<' + (o.act ? 'button' : 'div') + ' class="li' + (o.cls ? ' ' + o.cls : '') + '"' + (o.act ? ' data-act="' + o.act + '"' : '') + (o.data || '') + '>' + (o.ic ? '<span class="li-ic" style="background:' + o.bg + '">' + ICON(o.ic) + '</span>' : '') +
+    '<span class="li-main"><b>' + o.t + '</b>' + (o.s ? '<span class="mut small">' + o.s + '</span>' : '') + '</span><span class="li-end">' + (o.end || '') + (o.act ? '<span class="chev">›</span>' : '') + '</span></' + (o.act ? 'button' : 'div') + '>';
+}
 function viewMore() {
-  const d = D(), c = d.cfg;
-  let h = '<h1>More</h1><h2>Sync</h2><div class="card"><div class="row"><button class="p" data-act="sync">Sync now</button><button data-act="reload">Reload</button></div>' +
-    '<p class="mut small">Last sync: ' + esc(ago(c.last_sync)) + ' · last good sync: ' + esc(ago(c.last_sync_ok)) + '</p><p class="mut small">The sheet pulls WHOOP and Strava by itself around 07:00, 08:00 and 18:00 Cairo time.</p></div>';
-  h += syncBanner();
-  h += '<h2>Connections</h2><div class="card"><div class="row sp"><span>WHOOP</span><span class="pill ' + (d.connected.whoop ? 'keep' : 'swap') + '">' + (d.connected.whoop ? 'connected' : 'not connected') + '</span></div><div class="row sp" style="margin-top:16px"><span>Strava</span><span class="pill ' + (d.connected.strava ? 'keep' : 'swap') + '">' + (d.connected.strava ? 'connected' : 'not connected') + '</span></div>' +
-    '<p class="mut small">Apex only asks WHOOP for recovery, cycles (strain) and sleep, and Strava for your activities. Both are read-only.</p><div class="row" style="margin-top:20px"><button data-act="cw">Connect WHOOP</button><button data-act="cs">Connect Strava</button></div></div>';
-  h += '<h2>Log body</h2><div class="card"><button class="p" style="width:100%" data-act="body">Log weight and waist</button></div>';
-  h += '<h2>Events</h2>';
-  d.events.forEach((e) => {
+  const d = d0(), c = d.cfg, lastB = d.logs.Body[d.logs.Body.length - 1];
+  const st = (on) => '<span class="pill ' + (on ? 'keep' : 'swap') + '">' + (on ? 'Connected' : 'Connect') + '</span>';
+  let h = '<header class="top"><div><p class="date">Apex</p><h1>More</h1></div></header>' + syncBanner();
+  h += '<h2>Data</h2><div class="card list">' +
+    row({ act: 'sync', ic: I.sync, bg: 'var(--accFill)', t: S.busy ? 'Syncing…' : 'Sync now', s: 'Last good sync: ' + esc(ago(c.last_sync_ok)) }) +
+    row({ act: 'cw', ic: I.link, bg: '#111', t: 'WHOOP', s: 'Recovery, strain and sleep · read-only', end: st(d.connected.whoop) }) +
+    row({ act: 'cs', ic: I.run, bg: '#fc4c02', t: 'Strava', s: 'Your activities · read-only', end: st(d.connected.strava) }) +
+    row({ act: 'reload', ic: I.out, bg: '#64748b', t: 'Reload from sheet', s: 'Use after editing your Google Sheet' }) + '</div>';
+  h += '<h2>Body</h2><div class="card list">' + row({ act: 'body', ic: I.scale, bg: '#14b8a6', t: 'Log weight and waist', s: lastB ? 'Last: ' + esc(lastB.weight) + ' kg on ' + esc(niceDate(lastB.date)) : 'No entries yet' }) + '</div>';
+  h += '<h2>Events</h2><div class="card list">' + d.events.map((e) => {
     const left = e.date ? daysBetween(todayStr(), e.date) : null;
-    h += '<div class="card"><div class="row sp"><b>' + esc(e.name) + '</b><span class="mut fit">' + esc(e.date || 'date TBD') + '</span></div><div class="row sp"><span class="mut small">' + esc(e.type) + ' · ' + esc(e.status) + (left === null ? '' : left >= 0 ? ' · ' + left + ' days to go' : ' · passed') + '</span><button class="sm fit" data-act="evdel" data-n="' + esc(e.name) + '" data-d="' + esc(e.date) + '" aria-label="Delete ' + esc(e.name) + '">Delete</button></div></div>';
-  });
-  h += '<button class="sm" style="width:100%" data-act="evadd">+ Add event</button>';
-  h += '<h2>Settings</h2><div class="card"><p class="mut small">Bottle size, water targets, program start date, name and time zone (' + esc(tz()) + ') live in the Config tab of your sheet.</p><button class="r" data-act="logout">Disconnect this phone</button></div>';
+    return row({ act: 'evsheet', data: ' data-n="' + esc(e.name) + '" data-d="' + esc(e.date) + '"', ic: I.flag, bg: '#f59e0b', t: esc(e.name), s: e.date ? esc(niceDate(e.date)) : 'Date not set', end: left === null ? '' : left >= 0 ? '<span class="count">' + left + 'd</span>' : '<span class="mut small">passed</span>' });
+  }).join('') + row({ act: 'evadd', ic: I.plus, bg: 'var(--accFill)', t: 'Add event' }) + '</div>';
+  h += '<h2>Settings</h2><div class="card list">' +
+    row({ ic: I.drop, bg: '#0ea5e9', t: 'Bottle size', end: esc(c.bottle_ml || '750') + ' ml' }) +
+    row({ ic: I.drop, bg: '#0ea5e9', t: 'Water target', end: (Number(c.water_target_train || 4500) / 1000).toFixed(1) + ' L / ' + (Number(c.water_target_rest || 3500) / 1000).toFixed(1) + ' L' }) +
+    row({ ic: I.train, bg: '#6d5ce8', t: 'Program start', end: esc(c.program_start || '') }) +
+    row({ ic: I.gear, bg: '#64748b', t: 'Time zone', end: esc(tz()) }) + '</div><p class="foot">Change these in the Config tab of your Google Sheet.</p>';
+  h += '<div class="card list" style="margin-top:24px">' + row({ act: 'logout', ic: I.out, bg: 'var(--bad)', t: 'Disconnect this phone', cls: 'danger' }) + '</div>';
   return h;
 }
 
 function viewSetup() {
-  return '<div class="eyebrow"><img src="icon-192.png" alt="" class="mark">APEX</div><h1>Welcome</h1><p class="sub">Paste the two things from your Google Sheet setup (SETUP.md, steps 3 and 4).</p><div class="card"><label for="su" class="mut small" style="margin-bottom:8px">Web app URL (ends in /exec)</label><input id="su" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"><label for="st" class="mut small" style="display:block;margin:20px 0 8px">Token (api_token in the Config tab)</label><input id="st" autocomplete="off" placeholder="token"><button class="p" style="width:100%;margin-top:24px" data-act="connect">Connect</button></div>';
+  return '<div class="setup"><img src="icon-512.png" alt="" class="setup-logo"><h1>Welcome to Apex</h1><p class="sub">Paste the two things from your Google Sheet setup.</p><div class="card"><label for="su" class="mut small" style="margin-bottom:8px">Web app URL (ends in /exec)</label><input id="su" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"><label for="st" class="mut small" style="display:block;margin:20px 0 8px">Token (api_token in the Config tab)</label><input id="st" autocomplete="off" placeholder="token"><button class="p" style="width:100%;margin-top:24px" data-act="connect">Connect</button></div></div>';
 }
 
 const VIEWS = { today: viewToday, meals: viewMeals, train: viewTrain, insights: viewInsights, more: viewMore };
-const ICON = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
-const TABS = [
-  ['today', ICON('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.5 12 8l3.5 6.5"/>'), 'Today'],
-  ['meals', ICON('<path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8a2 2 0 0 1-2 2M9 3v6"/><path d="M17 21V3c-2 1.5-3 4-3 7v3h3"/>'), 'Meals'],
-  ['train', ICON('<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>'), 'Train'],
-  ['insights', ICON('<path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-7"/>'), 'Insights'],
-  ['more', ICON('<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>'), 'More']
-];
+const TABS = [['today', ICON(I.today), 'Today'], ['meals', ICON(I.meals), 'Meals'], ['train', ICON(I.train), 'Train'], ['insights', ICON(I.insights), 'Insights'], ['more', ICON(I.more), 'More']];
+
+function countUp(root) {
+  let reduce = false;
+  try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { /* ignore */ }
+  if (reduce || !window.requestAnimationFrame) return;
+  root.querySelectorAll('[data-count]').forEach((el) => {
+    const to = Number(el.dataset.count), dec = Number(el.dataset.dec) || 0, t0 = performance.now(), dur = 900;
+    const step = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = (to * e).toFixed(dec); if (k < 1) requestAnimationFrame(step); };
+    el.textContent = (0).toFixed(dec); requestAnimationFrame(step);
+  });
+}
 
 function render() {
   const app = $('#app'), tabs = $('#tabs');
   if (!S.url || !S.token) { app.innerHTML = viewSetup(); tabs.style.display = 'none'; return; }
   tabs.style.display = 'flex';
   tabs.innerHTML = TABS.map((t) => '<button class="' + (S.tab === t[0] ? 'on' : '') + '" aria-label="' + t[2] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + ' data-act="tab" data-t="' + t[0] + '">' + t[1] + '<span aria-hidden="true">' + t[2] + '</span></button>').join('');
-  if (!S.data) { app.innerHTML = '<h1>Loading...</h1><p class="sub">First load can take a few seconds.</p>'; return; }
-  const y = window.scrollY, key = S.tab + '|' + (S.viewDay || '') + '|' + (S.libTab || ''), fresh = S._shown !== key;
+  if (!S.data) { app.innerHTML = '<div class="skel"><i></i><i></i><i></i></div>'; return; }
+  const y = window.scrollY, key = S.tab + '|' + (S.viewDay || '') + '|' + (S.libTab || '') + '|' + (S.metric || '') + '|' + (S.shopPer || ''), fresh = S._shown !== key;
   S._shown = key;
   try { app.innerHTML = VIEWS[S.tab](); } catch (e) { app.innerHTML = '<div class="card">Display error: ' + esc(e.message) + '</div>'; }
   app.classList.remove('enter');
-  if (fresh) { void app.offsetWidth; app.classList.add('enter'); }
+  if (fresh) { void app.offsetWidth; app.classList.add('enter'); countUp(app); }
   S.flash = null;
   window.scrollTo(0, y);
 }
@@ -403,6 +558,7 @@ document.addEventListener('click', async (ev) => {
   const a = el.dataset.act;
   // B14: ignore a second tap that lands within 0.8 s on a logging button
   if (LOG_ACTS.includes(a)) { const t = Date.now(); if (t - S.lastTap < 800) return; S.lastTap = t; }
+  if (el.closest('.modal.info') && !el.closest('[data-close]')) closeSheets();
   const ds = todayStr(), ses = S.data && sessionFor(ds);
   const timeVal = () => { const i = $('#mt'); return (i && /^\d{2}:\d{2}$/.test(i.value) && i.value) || nowTime(); };
   const kcalField = (label) => ({ label: label || 'Calories (kcal)', type: 'number', attrs: 'inputmode="numeric" min="0" max="5000"', check: range('Calories', LIM.kcal[0], LIM.kcal[1]) });
@@ -421,7 +577,7 @@ document.addEventListener('click', async (ev) => {
       send({ action: 'suggest_decide', id: 'verdict-' + ds, status: a === 'vacc' ? 'accepted' : 'rejected', date: ds, text: 'Verdict ' + (w ? w.verdict + ' (recovery ' + w.recovery + '%)' : '') });
       break;
     }
-    case 'vundo': S.data.verdicts = S.data.verdicts.filter((v) => v.id !== 'verdict-' + ds); save(); render(); break;
+    case 'vundo': send({ action: 'suggest_decide', id: 'verdict-' + ds, status: 'cleared', date: ds, text: 'Verdict choice cleared' }); break;
     case 'wdone': case 'wskip': send({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: a === 'wdone' ? 'done' : 'skipped', note: ses.mode, time: nowTime() } }); break;
     case 'wundo': send({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: ses.name } }); break;
     case 'mate': S.flash = 'meal'; send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
@@ -463,6 +619,16 @@ document.addEventListener('click', async (ev) => {
       send({ action: 'log', table: 'Events', row: { name: v[0], date: v[1], type: v[2] || 'race', status: v[1] && v[1] < ds ? 'done' : 'upcoming', result: '' } }); break;
     }
     case 'evdel': if (confirm('Delete ' + el.dataset.n + '?')) send({ action: 'del', table: 'Events', row: { name: el.dataset.n, date: el.dataset.d } }); break;
+    case 'msheet': mealSheet(el.dataset.slot); break;
+    case 'ssheet': if (ses) infoSheet(ses.name, '<p class="mut small">' + esc(ses.p.time) + ' · ' + esc(ses.mode === 'swap' ? 'Recovery' : ses.p.load) + '</p>' + blocksHTML(ses.details)); break;
+    case 'jump': if (el.dataset.k === 'insights') { S.tab = 'insights'; S.metric = 'sleep_hours'; render(); window.scrollTo(0, 0); break; } { const t = document.getElementById('sec-' + el.dataset.k); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
+    case 'shopper': S.shopPer = el.dataset.p; render(); break;
+    case 'metric': S.metric = el.dataset.m; render(); break;
+    case 'evsheet': {
+      const n = el.dataset.n, dt = el.dataset.d, left = dt ? daysBetween(ds, dt) : null;
+      infoSheet(n, '<div class="evbig">' + (left === null ? '<b>—</b><span>date not set</span>' : left >= 0 ? '<b>' + left + '</b><span>days to go</span>' : '<b>✓</b><span>passed</span>') + '</div><p class="mut center">' + (dt ? esc(niceDate(dt)) : 'Add the date in the Events tab of your sheet.') + '</p><button class="r" style="width:100%;margin-top:24px" data-act="evdel" data-n="' + esc(n) + '" data-d="' + esc(dt) + '">Delete event</button>');
+      break;
+    }
     case 'vday': S.viewDay = el.dataset.d; render(); break;
     case 'ltab': S.libTab = el.dataset.t; render(); break;
     case 'sacc': case 'srej': send({ action: 'suggest_decide', id: el.dataset.id, status: a === 'sacc' ? 'accepted' : 'rejected' }); break;
