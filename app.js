@@ -92,6 +92,8 @@ function applyLocal(item) {
     const i = L.findIndex((r) => keys.every((k) => String(r[k]) === String(item.row[k])));
     if (item.action === 'del') { if (i >= 0) L.splice(i, 1); return; }
     if (i >= 0) L[i] = Object.assign({}, L[i], item.row); else L.push(Object.assign({}, item.row));
+  } else if (item.action === 'config') {
+    d.cfg[item.key] = String(item.value);
   } else if (item.action === 'suggest_decide') {
     d.suggestions = d.suggestions.filter((s) => s.id !== item.id);
     if (String(item.id).startsWith('verdict-')) {
@@ -243,6 +245,13 @@ function kcalEaten(ms, ml) {
     const m = ms.find((x) => x.slot === r.slot); return a + (m ? Number(m.kcal) || 0 : 0);
   }, 0);
 }
+const OZ = 29.5735;
+const wUnit = () => (['L', 'ml', 'oz'].indexOf(D().cfg.water_unit) >= 0 ? D().cfg.water_unit : 'L');
+// ml -> number in the chosen unit, and formatted text
+function wNum(ml, u) { u = u || wUnit(); return u === 'L' ? ml / 1000 : u === 'oz' ? ml / OZ : ml; }
+function wDec(u, big) { u = u || wUnit(); return u === 'L' ? (big ? 2 : 1) : 0; }
+function wFmt(ml, u, dec) { u = u || wUnit(); const d = dec === undefined ? wDec(u) : dec; return wNum(ml, u).toFixed(d) + ' ' + u; }
+function toMl(v, u) { const n = Number(v); return u === 'L' ? n * 1000 : u === 'oz' ? n * OZ : n; }
 function waterInfo(ds) {
   const c = d0().cfg, bot = Number(c.bottle_ml) || 750, tgt = Number(dow(ds) === 'Sat' ? c.water_target_rest : c.water_target_train) || 4000;
   const ml = Number((logs('WaterLog', ds)[0] || {}).ml) || 0;
@@ -328,7 +337,7 @@ function viewToday() {
   const eaten = kcalEaten(ms, ml), kT = Number(tg.kcal) || 0, W = waterInfo(ds);
   h += '<div class="rings3">' +
     miniRing('meals', 'Fuel', eaten, kT, 'kcal', 'url(#gk)', eaten + ' / ' + kT) +
-    miniRing('water', 'Water', W.ml, W.tgt, 'L', 'url(#gw)', (W.ml / 1000).toFixed(1) + ' / ' + (W.tgt / 1000).toFixed(1) + ' L') +
+    miniRing('water', 'Water', W.ml, W.tgt, wUnit(), 'url(#gw)', wNum(W.ml).toFixed(wDec()) + ' / ' + wFmt(W.tgt)) +
     miniRing('insights', 'Sleep', w ? Number(w.sleep_perf) || 0 : 0, 100, '%', 'url(#gt)', w && w.sleep_hours ? esc(w.sleep_hours) + ' h' : 'No data') + '</div>';
 
   // up next
@@ -348,9 +357,9 @@ function viewToday() {
 
   // water
   const pct = W.tgt ? Math.min(100, (W.ml / W.tgt) * 100) : 0;
-  h += '<h2 id="sec-water">Water</h2><section class="card water' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp" style="align-items:baseline"><div><span class="big">' + cnt(W.ml / 1000, 2) + '</span><span class="unit"> / ' + (W.tgt / 1000).toFixed(1) + ' L</span></div><span class="mut small">' + (W.ml >= W.tgt ? 'Goal reached ✓' : Math.round(pct) + '%') + '</span></div>' +
+  h += '<h2 id="sec-water">Water</h2><section class="card water' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp" style="align-items:baseline"><div><span class="big">' + cnt(wNum(W.ml), wDec(null, true)) + '</span><span class="unit"> / ' + wFmt(W.tgt) + '</span></div><span class="mut small">' + (W.ml >= W.tgt ? 'Goal reached ✓' : Math.round(pct) + '%') + '</span></div>' +
     '<div class="bar wbar" role="img" aria-label="' + Math.round(pct) + ' percent of water goal"><i style="width:' + pct + '%"></i></div>' +
-    '<div class="row" style="margin-top:20px"><button class="icon-btn" data-act="wminus" aria-label="Remove one bottle" ' + (W.ml <= 0 ? 'disabled' : '') + '>−</button><button class="p" data-act="wplus">' + ICON(I.drop, 'ib') + ' Add ' + W.bot + ' ml</button></div></section>';
+    '<div class="row" style="margin-top:20px"><button class="icon-btn" data-act="wminus" aria-label="Remove one bottle" ' + (W.ml <= 0 ? 'disabled' : '') + '>−</button><button class="p" data-act="wplus">' + ICON(I.drop, 'ib') + ' Add ' + wFmt(W.bot, null, wUnit() === 'L' ? 2 : 0) + '</button></div></section>';
 
   // check-in
   const ck = logs('Checkin', ds)[0];
@@ -470,6 +479,33 @@ function interestsBody() {
     '<h2>Add</h2><div class="chiprow">' + INTEREST_IDEAS.filter((x) => lower.indexOf(x.toLowerCase()) < 0).map((n) => '<button class="chip" data-act="intadd" data-n="' + esc(n) + '">+ ' + esc(n) + '</button>').join('') + '</div>' +
     '<div class="row" style="margin-top:16px"><input id="ia" maxlength="40" placeholder="Something else, e.g. Kitesurfing" aria-label="Add your own sport"><button class="p fit" data-act="intaddc">Add</button></div>';
 }
+
+/* ---------- settings sheets ---------- */
+function trimNum(n, u) { return Number(n).toFixed(u === 'L' ? 2 : 0).replace(/\.0+$/, '').replace(/(\.\d)0$/, '$1'); }
+function waterSetBody(u) {
+  const c = D().cfg; u = u || S.setUnit || wUnit();
+  const step = u === 'L' ? '0.05' : u === 'oz' ? '1' : '50';
+  const v = (ml) => trimNum(wNum(Number(ml), u), u);
+  return '<div class="segc" role="tablist" aria-label="Unit">' + ['L', 'ml', 'oz'].map((x) => '<button role="tab" aria-selected="' + (x === u) + '" class="' + (x === u ? 'on' : '') + '" data-act="setunit" data-u="' + x + '">' + { L: 'Liters', ml: 'Milliliters', oz: 'Ounces' }[x] + '</button>').join('') + '</div>' +
+    '<label for="sw0" class="mut small" style="margin:20px 0 8px">Bottle size (' + u + ')</label><input id="sw0" type="number" inputmode="decimal" step="' + step + '" value="' + v(c.bottle_ml || 750) + '">' +
+    '<div class="chiprow">' + [500, 750, 1000, 1500].map((ml) => '<button class="chip" data-act="setbot" data-ml="' + ml + '">' + trimNum(wNum(ml, u), u) + ' ' + u + '</button>').join('') + '</div>' +
+    '<label for="sw1" class="mut small" style="margin:20px 0 8px">Daily target, training days (' + u + ')</label><input id="sw1" type="number" inputmode="decimal" step="' + step + '" value="' + v(c.water_target_train || 4500) + '">' +
+    '<label for="sw2" class="mut small" style="margin:20px 0 8px">Daily target, rest day / Saturday (' + u + ')</label><input id="sw2" type="number" inputmode="decimal" step="' + step + '" value="' + v(c.water_target_rest || 3500) + '">' +
+    '<p class="err" id="swerr" role="alert"></p><button class="p" style="width:100%" data-act="savewater">Save</button>';
+}
+function tzBody() {
+  let dev = '', list = [];
+  try { dev = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { /* ignore */ }
+  try { list = Intl.supportedValuesOf('timeZone'); } catch (e) { list = ['Africa/Cairo', 'Europe/London', 'Europe/Warsaw', 'Europe/Berlin', 'Europe/Paris', 'Asia/Dubai', 'Asia/Riyadh', 'America/New_York', 'America/Los_Angeles']; }
+  const cur = tz();
+  if (list.indexOf(cur) < 0) list.unshift(cur);
+  return '<p class="mut small">Apex uses this to decide when your day starts, when water resets and which WHOOP score is today\'s. Change it when you travel.</p>' +
+    (dev && dev !== cur ? '<button class="p" style="width:100%;margin-top:16px" data-act="savetz" data-z="' + esc(dev) + '">Use my phone\'s time zone (' + esc(dev.replace(/_/g, ' ')) + ')</button>' : '<p class="chosen">✓ Same as your phone</p>') +
+    '<div class="chiprow">' + ['Africa/Cairo', 'Europe/Warsaw', 'Europe/London', 'Asia/Dubai'].filter((z) => z !== cur).map((z) => '<button class="chip" data-act="savetz" data-z="' + z + '">' + z.split('/')[1].replace(/_/g, ' ') + '</button>').join('') + '</div>' +
+    '<label for="tzs" class="mut small" style="margin:20px 0 8px">All time zones</label><select id="tzs">' + list.map((z) => '<option value="' + esc(z) + '"' + (z === cur ? ' selected' : '') + '>' + esc(z.replace(/_/g, ' ')) + '</option>').join('') + '</select>' +
+    '<button style="width:100%;margin-top:16px" data-act="savetzsel">Save selected</button>';
+}
+function setCfg(key, value) { send({ action: 'config', key, value: String(value) }); }
 
 /* ---------- Meals ---------- */
 function shopKey(per, item) { return 'shop-' + periodKey(per) + '-' + per + item; }
@@ -608,10 +644,11 @@ function viewMore() {
     return row({ act: 'evsheet', data: ' data-n="' + esc(e.name) + '" data-d="' + esc(e.date) + '"', ic: I.flag, bg: '#f59e0b', t: esc(e.name), s: e.date ? esc(niceDate(e.date)) : 'Date not set', end: left === null ? '' : left >= 0 ? '<span class="count">' + left + 'd</span>' : '<span class="mut small">passed</span>' });
   }).join('') + row({ act: 'evadd', ic: I.plus, bg: 'var(--accFill)', t: 'Add event' }) + '</div>';
   h += '<h2>Settings</h2><div class="card list">' +
-    row({ ic: I.drop, bg: '#0ea5e9', t: 'Bottle size', end: esc(c.bottle_ml || '750') + ' ml' }) +
-    row({ ic: I.drop, bg: '#0ea5e9', t: 'Water target', end: (Number(c.water_target_train || 4500) / 1000).toFixed(1) + ' L / ' + (Number(c.water_target_rest || 3500) / 1000).toFixed(1) + ' L' }) +
-    row({ ic: I.train, bg: '#6d5ce8', t: 'Program start', end: esc(c.program_start || '') }) +
-    row({ ic: I.gear, bg: '#64748b', t: 'Time zone', end: esc(tz()) }) + '</div><p class="foot">Change these in the Config tab of your Google Sheet.</p>';
+    row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Water unit', end: esc({ L: 'Liters', ml: 'Milliliters', oz: 'Ounces' }[wUnit()]) }) +
+    row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Bottle size', end: esc(wFmt(Number(c.bottle_ml) || 750, null, wUnit() === 'L' ? 2 : 0)) }) +
+    row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Water target', s: 'Training day / rest day', end: esc(wFmt(Number(c.water_target_train) || 4500) + ' / ' + wFmt(Number(c.water_target_rest) || 3500)) }) +
+    row({ act: 'setstart', ic: I.train, bg: '#6d5ce8', t: 'Program start', s: 'Today is week ' + weekNo(todayStr()) + ' of 4', end: esc(c.program_start ? niceDate(c.program_start) : 'Not set') }) +
+    row({ act: 'settz', ic: I.gear, bg: '#64748b', t: 'Time zone', end: esc(tz().replace(/_/g, ' ')) }) + '</div><p class="foot">Tap a setting to change it. Changes save to your Google Sheet.</p>';
   h += '<div class="card list" style="margin-top:24px">' + row({ act: 'logout', ic: I.out, bg: 'var(--bad)', t: 'Disconnect this phone', cls: 'danger' }) + '</div>';
   return h;
 }
@@ -656,7 +693,7 @@ document.addEventListener('click', async (ev) => {
   const a = el.dataset.act;
   // B14: ignore a second tap that lands within 0.8 s on a logging button
   if (LOG_ACTS.includes(a)) { const t = Date.now(); if (t - S.lastTap < 800) return; S.lastTap = t; }
-  const KEEP = ['extick', 'icpick', 'inspsave', 'inspdel', 'intadd', 'intaddc', 'intdel'];
+  const KEEP = ['extick', 'icpick', 'inspsave', 'inspdel', 'intadd', 'intaddc', 'intdel', 'setunit', 'setbot', 'savewater', 'savetz', 'savetzsel'];
   if (el.closest('.modal.info') && !el.closest('[data-close]') && KEEP.indexOf(a) < 0) closeSheets();
   const ds = todayStr(), ses = S.data && sessionFor(ds);
   const timeVal = () => { const i = $('#mt'); return (i && /^\d{2}:\d{2}$/.test(i.value) && i.value) || nowTime(); };
@@ -696,8 +733,8 @@ document.addEventListener('click', async (ev) => {
     case 'wplus': case 'wminus': {
       const bot = Number(S.data.cfg.bottle_ml) || 750, cur = Number((logs('WaterLog', ds)[0] || {}).ml) || 0;
       const nv = Math.max(0, cur + (a === 'wplus' ? bot : -bot));
-      if (nv > LIM.waterMax) { toast('That would be over 10 L today. Not added.', 3000); break; }
-      if (a === 'wplus' && cur < LIM.waterWarn && nv >= LIM.waterWarn && !confirm('Over 6 L today. Too much water too fast can be dangerous. Add anyway?')) break;
+      if (nv > LIM.waterMax) { toast('That would be over ' + wFmt(LIM.waterMax, null, 0) + ' today. Not added.', 3000); break; }
+      if (a === 'wplus' && cur < LIM.waterWarn && nv >= LIM.waterWarn && !confirm('Over ' + wFmt(LIM.waterWarn, null, 0) + ' today. Too much water too fast can be dangerous. Add anyway?')) break;
       S.flash = 'water'; send({ action: 'log', table: 'WaterLog', row: { date: ds, ml: nv, time: nowTime() } }); break;
     }
     case 'feel': send({ action: 'log', table: 'Checkin', row: { date: ds, feel: el.dataset.v } }); break;
@@ -719,6 +756,32 @@ document.addEventListener('click', async (ev) => {
     }
     case 'evdel': if (confirm('Delete ' + el.dataset.n + '?')) send({ action: 'del', table: 'Events', row: { name: el.dataset.n, date: el.dataset.d } }); break;
     case 'msheet': mealSheet(el.dataset.slot); break;
+    case 'setwater': S.setUnit = null; infoSheet('Water', waterSetBody(), 'water'); break;
+    case 'setunit': {
+      const from = S.setUnit || wUnit(), to = el.dataset.u, vals = [0, 1, 2].map((i) => toMl($('#sw' + i).value, from));
+      S.setUnit = to; refreshSheet('water', waterSetBody(to));
+      vals.forEach((ml, i) => { if (isFinite(ml) && ml > 0) $('#sw' + i).value = trimNum(wNum(ml, to), to); });
+      break;
+    }
+    case 'setbot': { const u = S.setUnit || wUnit(); $('#sw0').value = trimNum(wNum(Number(el.dataset.ml), u), u); break; }
+    case 'savewater': {
+      const u = S.setUnit || wUnit(), [b, t1, t2] = [0, 1, 2].map((i) => Math.round(toMl($('#sw' + i).value, u))), err = $('#swerr');
+      if (!(b >= 100 && b <= 3000)) { err.textContent = 'Bottle size must be between ' + trimNum(wNum(100, u), u) + ' and ' + trimNum(wNum(3000, u), u) + ' ' + u; break; }
+      if (!(t1 >= 500 && t1 <= 10000) || !(t2 >= 500 && t2 <= 10000)) { err.textContent = 'Targets must be between ' + trimNum(wNum(500, u), u) + ' and ' + trimNum(wNum(10000, u), u) + ' ' + u; break; }
+      setCfg('water_unit', u); setCfg('bottle_ml', b); setCfg('water_target_train', t1); setCfg('water_target_rest', t2);
+      closeSheets(); toast('Water settings saved'); break;
+    }
+    case 'setstart': {
+      const v = await form('Program start', [{ label: 'First day of Week 1', type: 'date', value: S.data.cfg.program_start || todayStr(), check: validDate(false) }]);
+      if (!v) break;
+      setCfg('program_start', v[0]); toast('Week 1 starts ' + niceDate(v[0])); break;
+    }
+    case 'settz': infoSheet('Time zone', tzBody(), 'tz'); break;
+    case 'savetz': case 'savetzsel': {
+      const z = a === 'savetz' ? el.dataset.z : $('#tzs').value;
+      try { new Intl.DateTimeFormat('en', { timeZone: z }); } catch (e) { toast('Unknown time zone'); break; }
+      setCfg('timezone', z); closeSheets(); toast('Time zone set to ' + z.replace(/_/g, ' ')); break;
+    }
     case 'docsheet': infoSheet('Program documents', docsBody(), 'docs'); break;
     case 'inspsheet': infoSheet('Reels and TikToks', inspBody(), 'insp'); break;
     case 'intsheet': infoSheet('Sports I\'m into', interestsBody(), 'ints'); break;
