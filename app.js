@@ -30,11 +30,27 @@ function weekNo(ds) {
   const diff = daysBetween(start, ds);
   return diff < 0 ? 1 : (Math.floor(diff / 7) % 4) + 1;
 }
+// Accepts "2026-11-16 07:02", "2026-11-16" or a full ISO/Date string; returns null when unreadable.
+function parseStamp(x) {
+  if (!x) return null;
+  const s = String(x), m = s.match(/^(\d{4}-\d{2}-\d{2})(?:[ ](\d{2}:\d{2}))?$/);
+  if (m) return { d: m[1], t: m[2] || '' };
+  const dt = new Date(s);
+  if (isNaN(dt.getTime())) return null;
+  const L = local(dt); return { d: L.date, t: L.time };
+}
 function ago(stamp) {
-  if (!stamp) return 'never';
-  const [d, t] = String(stamp).split(' ');
-  const n = daysBetween(d, todayStr());
-  return n === 0 ? 'today ' + (t || '') : n === 1 ? 'yesterday ' + (t || '') : n + ' days ago';
+  const p = parseStamp(stamp); if (!p) return 'never';
+  const n = daysBetween(p.d, todayStr()); if (!isFinite(n)) return 'never';
+  return n <= 0 ? 'today ' + p.t : n === 1 ? 'yesterday ' + p.t : n + ' days ago';
+}
+function updatedLabel() {
+  const c = D().cfg;
+  if (S.busy) return '<p class="upd busy"><i></i>Syncing WHOOP and Strava…</p>';
+  if (c.last_sync_error && D().connected.whoop) return '<p class="upd bad"><i></i>Last sync had a problem · see below</p>';
+  const a = ago(c.last_sync_ok);
+  if (a === 'never') return '<p class="upd off"><i></i>Not synced yet · pull down to sync</p>';
+  return '<p class="upd"><i></i>Updated ' + esc(a.replace('today ', '')) + '</p>';
 }
 let toastT;
 const toast = (m, ms) => { const t = $('#toast'); t.textContent = m; t.className = 'on'; clearTimeout(toastT); toastT = setTimeout(() => (t.className = ''), ms || 2200); };
@@ -302,9 +318,8 @@ function miniRing(key, label, val, tgt, unit, stroke, txt) {
 const ST_ICON = { ate: '✓', swap: '↺', extra: '+', skipped: '✕', next: '•', todo: '' };
 function viewToday() {
   const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p, w = whoopFor(ds), ch = verdictChoice(ds);
-  const synced = c.last_sync_ok ? ago(c.last_sync_ok).replace('today ', '') : 'Sync';
-  let h = '<header class="top"><div><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1></div>' +
-    '<button class="chip-btn' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync now. Last synced ' + esc(synced) + '">' + ICON(I.sync) + '<span>' + (S.busy ? 'Syncing' : esc(synced)) + '</span></button></header>';
+  let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
+    '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
   h += syncBanner() + tzBanner();
   h += heroCard(ds, w, ch, ses);
   if (!p) return h;
@@ -327,8 +342,8 @@ function viewToday() {
   // day timeline
   h += '<div class="tl" role="list" aria-label="Today\'s meals">' + ms.map((m) => {
     const r = ml.find((x) => x.slot === m.slot), st = r ? r.status : m === next ? 'next' : 'todo';
-    return '<button role="listitem" class="tl-i ' + st + '" data-act="msheet" data-slot="' + esc(m.slot) + '" aria-label="' + esc(m.name) + ', ' + (r ? r.status : 'not logged') + '"><span class="tl-t">' + esc(r && r.time ? r.time : m.time) + '</span><span class="tl-ic">' + ST_ICON[st] + '</span><span class="tl-n">' + esc(m.name.replace('Morning protocol', 'Morning').replace(' + soup', '')) + '</span></button>';
-  }).join('') + ml.filter((r) => r.status === 'extra').map((r) => '<button role="listitem" class="tl-i extra" data-act="msheet" data-slot="' + esc(r.slot) + '"><span class="tl-t">' + esc(r.time) + '</span><span class="tl-ic">+</span><span class="tl-n">' + esc(r.extra_name) + '</span></button>').join('') +
+    return '<button role="listitem" class="tl-i st-' + st + '" data-act="msheet" data-slot="' + esc(m.slot) + '" aria-label="' + esc(m.name) + ', ' + (r ? r.status : 'not logged') + '"><span class="tl-t">' + esc(r && r.time ? r.time : m.time) + '</span><span class="tl-ic">' + ST_ICON[st] + '</span><span class="tl-n">' + esc(m.name.replace('Morning protocol', 'Morning').replace(' + soup', '')) + '</span></button>';
+  }).join('') + ml.filter((r) => r.status === 'extra').map((r) => '<button role="listitem" class="tl-i st-extra" data-act="msheet" data-slot="' + esc(r.slot) + '"><span class="tl-t">' + esc(r.time) + '</span><span class="tl-ic">+</span><span class="tl-n">' + esc(r.extra_name) + '</span></button>').join('') +
     '<button class="tl-i add" data-act="mextra" aria-label="Add a snack"><span class="tl-t">&nbsp;</span><span class="tl-ic">' + ICON(I.plus) + '</span><span class="tl-n">Snack</span></button></div>';
 
   // water
@@ -376,14 +391,43 @@ function mealSheet(slot) {
   else b += '<label for="mt" class="mut small" style="margin:20px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '"><div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(slot) + '">Swap</button></div>';
   infoSheet(m.name, b);
 }
-function blocksHTML(txt) {
+function secInfo(h) {
+  let tag = '', title = h, rest = '', kind = 'block';
+  if (/^note/i.test(h)) return { kind: 'note', tag: 'NOTE', title: '', rest: '' };
+  if (/^(warm|cool|mobility|before|deep|long|breath)/i.test(h)) kind = 'warm';
+  const m = h.match(/^(block\s*[\w]+)\s*:\s*(.*)$/i);
+  if (m) { tag = m[1].toUpperCase(); title = m[2]; }
+  const r = title.match(/^(.*?)[,(]?\s*rest\s+(\d[^)]*)\)?\s*$/i);
+  if (r && r[1].trim()) { title = r[1].replace(/[,(]\s*$/, '').trim(); rest = r[2].trim(); }
+  if (kind === 'warm' && !tag) { const w = title.match(/^(\S+)\s+(.*)$/); tag = (w ? w[1] : title).toUpperCase(); title = w ? w[2] : ''; }
+  return { kind, tag, title, rest };
+}
+function exParts(x) {
+  const m = x.match(/^(.*?)[,:]?\s+((?:\d+(?:-\d+)?\s*(?:s|m|kg|cal)?\s*(?:each(?:\s+side|\s+hand)?|\/side)?\s*)x\s*\d+\b.*)$/i);
+  return m && m[1].length > 1 ? [m[1], m[2].replace(/\s*x\s*/i, ' × ')] : [x, ''];
+}
+function exKey(day, i) { return 'ex-' + day + '-' + i; }
+function blocksHTML(txt, day) {
+  day = day || todayStr();
   const secs = []; let cur = null;
   String(txt || '').split('\n').forEach((l) => {
     l = l.trim(); if (!l) return;
     if (l[0] === '#') { cur = { h: l.replace(/^#\s*/, ''), items: [] }; secs.push(cur); }
     else { if (!cur) { cur = { h: 'Session', items: [] }; secs.push(cur); } cur.items.push(l.replace(/^-\s*/, '')); }
   });
-  return '<div class="det">' + secs.map((s, i) => '<details class="blk"' + (i < 2 ? ' open' : '') + '><summary><span class="bn">' + (i + 1) + '</span><span class="bt-t">' + esc(s.h) + '</span><span class="cnt">' + s.items.length + '</span></summary><ul>' + s.items.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul></details>').join('') + '</div>';
+  let n = 0, done = 0;
+  const body = secs.map((s) => {
+    const k = secInfo(s.h);
+    if (k.kind === 'note') return '<div class="wo-note"><span aria-hidden="true">💡</span><div>' + s.items.map(esc).join('<br>') + '</div></div>';
+    const items = s.items.map((x) => {
+      const key = exKey(day, n++), on = LS.getItem(key) === '1'; if (on) done++;
+      const [name, rx] = exParts(x);
+      return '<li><button class="ex' + (on ? ' on' : '') + '" data-act="extick" data-k="' + key + '" aria-pressed="' + on + '"><span class="ex-chk" aria-hidden="true"></span><span class="ex-name">' + esc(name) + '</span>' + (rx ? '<span class="ex-rx">' + esc(rx) + '</span>' : '') + '</button></li>';
+    }).join('');
+    return '<section class="wo-sec ' + k.kind + '"><div class="wo-h">' + (k.tag ? '<span class="wo-tag">' + esc(k.tag) + '</span>' : '') + (k.title ? '<b>' + esc(k.title) + '</b>' : '') + (k.rest ? '<span class="wo-rest">' + ICON('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>') + 'Rest ' + esc(k.rest) + '</span>' : '') + '</div><ul class="wo-list">' + items + '</ul></section>';
+  }).join('');
+  const pct = n ? Math.round((done / n) * 100) : 0;
+  return '<div class="det wo"><div class="wo-prog"><span>' + done + ' of ' + n + ' done</span><div class="bar"><i style="width:' + pct + '%"></i></div></div>' + body + '</div>';
 }
 function parseDetails(txt) { return blocksHTML(txt); }
 
@@ -398,10 +442,18 @@ function viewMeals() {
     h += '<section class="card macro"><div class="macro-ring">' + ringSVG(eaten / kT, 124, 12, 'url(#gk)') + '<div class="hero-num sm"><b>' + cnt(eaten) + '</b><span>of ' + esc(t.kcal) + '</span></div></div><div class="macros">' +
       [['Protein', t.protein, 'var(--ringA)'], ['Carbs', t.carbs, 'var(--ringC)'], ['Fat', t.fat, '#f59e0b']].map(([n, g, col]) => '<div class="mac"><span class="mut small">' + n + '</span><b>' + esc(g) + ' g</b><i style="background:' + col + '"></i></div>').join('') + '</div></section>';
     h += '<p class="sub center">' + esc(p.daytype.charAt(0).toUpperCase() + p.daytype.slice(1)) + ' day · ' + esc(p.session) + '</p>';
-    h += '<h2>Today</h2><div class="card list">' + ms.map((m) => {
-      const r = ml.find((x) => x.slot === m.slot), st = r ? r.status : 'todo';
-      return '<button class="li" data-act="msheet" data-slot="' + esc(m.slot) + '"><span class="li-time">' + esc(r && r.time ? r.time : m.time) + '</span><span class="li-dot ' + st + '"></span><span class="li-main"><b>' + esc(m.name) + '</b><span class="mut small">' + esc(m.items) + '</span></span><span class="li-end">' + (Number(m.kcal) ? esc(m.kcal) : '') + '<span class="chev">›</span></span></button>';
-    }).join('') + '<button class="li add" data-act="mextra"><span class="li-time"></span><span class="li-dot plus">+</span><span class="li-main"><b>Add a snack or extra meal</b></span></button></div>';
+    const nxt = ms.find((m) => !ml.find((x) => x.slot === m.slot));
+    const ST = { ate: ['✓', 'Ate'], swap: ['↺', 'Swapped'], skipped: ['✕', 'Skipped'] };
+    h += '<h2>Today</h2><div class="mtl">' + ms.map((m) => {
+      const r = ml.find((x) => x.slot === m.slot), st = r ? r.status : m === nxt ? 'next' : 'todo';
+      const nS = m.supps ? m.supps.split(',').length : 0;
+      return '<button class="mt-row st-' + st + '" data-act="msheet" data-slot="' + esc(m.slot) + '" aria-label="' + esc(m.name) + ' at ' + esc(m.time) + ', ' + (r ? ST[r.status] ? ST[r.status][1] : r.status : st === 'next' ? 'up next' : 'not logged') + '">' +
+        '<span class="mt-rail"><span class="mt-time">' + esc(m.time) + '</span><span class="mt-dot" aria-hidden="true">' + (r && ST[r.status] ? ST[r.status][0] : '') + '</span></span>' +
+        '<span class="mt-card"><span class="mt-head"><b>' + esc(m.name) + '</b>' + (r && ST[r.status] ? '<span class="mt-st">' + ST[r.status][1] + (r.time ? ' ' + esc(r.time) : '') + '</span>' : st === 'next' ? '<span class="mt-st nx">Up next</span>' : '') + '</span>' +
+        '<span class="mt-items">' + esc(r && r.status === 'swap' && r.note ? r.note : m.items) + '</span>' +
+        '<span class="mt-tags">' + ((r && r.status === 'swap' ? Number(r.kcal) : Number(m.kcal)) ? '<span class="chipk">' + esc(r && r.status === 'swap' ? r.kcal : m.kcal) + ' kcal</span>' : '') + (nS ? '<span class="chips">💊 ' + nS + ' supplement' + (nS > 1 ? 's' : '') + '</span>' : '') + '</span></span></button>';
+    }).join('') + ml.filter((r) => r.status === 'extra').map((r) => '<button class="mt-row st-ate" data-act="msheet" data-slot="' + esc(r.slot) + '"><span class="mt-rail"><span class="mt-time">' + esc(r.time) + '</span><span class="mt-dot">+</span></span><span class="mt-card"><span class="mt-head"><b>' + esc(r.extra_name) + '</b><span class="mt-st">Extra</span></span><span class="mt-tags"><span class="chipk">' + esc(r.kcal) + ' kcal</span></span></span></button>').join('') +
+      '<button class="mt-row add" data-act="mextra"><span class="mt-rail"><span class="mt-time"></span><span class="mt-dot">+</span></span><span class="mt-card"><b>Add a snack or extra meal</b></span></button></div>';
   }
   const per = S.shopPer || 'weekly', items = d.shopping.filter((s) => s.period === per);
   const got = items.filter((s) => LS.getItem(shopKey(per, s.item)) === '1').length;
@@ -430,7 +482,7 @@ function viewTrain() {
   const ses = sessionFor(sel);
   if (ses) {
     const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
-    h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' + blocksHTML(ses.details) + '</section>';
+    h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' + blocksHTML(ses.details, sel) + '</section>';
   }
   const tabs = [...new Set(d.library.map((l) => l.tab))];
   if (tabs.length) {
@@ -558,7 +610,7 @@ document.addEventListener('click', async (ev) => {
   const a = el.dataset.act;
   // B14: ignore a second tap that lands within 0.8 s on a logging button
   if (LOG_ACTS.includes(a)) { const t = Date.now(); if (t - S.lastTap < 800) return; S.lastTap = t; }
-  if (el.closest('.modal.info') && !el.closest('[data-close]')) closeSheets();
+  if (el.closest('.modal.info') && !el.closest('[data-close]') && a !== 'extick') closeSheets();
   const ds = todayStr(), ses = S.data && sessionFor(ds);
   const timeVal = () => { const i = $('#mt'); return (i && /^\d{2}:\d{2}$/.test(i.value) && i.value) || nowTime(); };
   const kcalField = (label) => ({ label: label || 'Calories (kcal)', type: 'number', attrs: 'inputmode="numeric" min="0" max="5000"', check: range('Calories', LIM.kcal[0], LIM.kcal[1]) });
@@ -620,6 +672,14 @@ document.addEventListener('click', async (ev) => {
     }
     case 'evdel': if (confirm('Delete ' + el.dataset.n + '?')) send({ action: 'del', table: 'Events', row: { name: el.dataset.n, date: el.dataset.d } }); break;
     case 'msheet': mealSheet(el.dataset.slot); break;
+    case 'extick': {
+      const on = LS.getItem(el.dataset.k) !== '1'; LS.setItem(el.dataset.k, on ? '1' : '0');
+      el.classList.toggle('on', on); el.setAttribute('aria-pressed', on);
+      const box = el.closest('.wo'), all = box.querySelectorAll('.ex'), dn = box.querySelectorAll('.ex.on').length;
+      box.querySelector('.wo-prog span').textContent = dn + ' of ' + all.length + ' done';
+      box.querySelector('.wo-prog i').style.width = Math.round((dn / all.length) * 100) + '%';
+      break;
+    }
     case 'ssheet': if (ses) infoSheet(ses.name, '<p class="mut small">' + esc(ses.p.time) + ' · ' + esc(ses.mode === 'swap' ? 'Recovery' : ses.p.load) + '</p>' + blocksHTML(ses.details)); break;
     case 'jump': if (el.dataset.k === 'insights') { S.tab = 'insights'; S.metric = 'sleep_hours'; render(); window.scrollTo(0, 0); break; } { const t = document.getElementById('sec-' + el.dataset.k); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
     case 'shopper': S.shopPer = el.dataset.p; render(); break;
@@ -650,6 +710,47 @@ window.addEventListener('online', () => load());
 document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+/* ---------- pull to refresh: pull down at the top to sync WHOOP + Strava and redraw everything ---------- */
+(function pullToRefresh() {
+  const ind = document.createElement('div');
+  ind.id = 'ptr'; ind.setAttribute('aria-hidden', 'true');
+  ind.innerHTML = ICON(I.sync) + '<span>Pull to sync</span>';
+  document.body.appendChild(ind);
+  const TH = 64; let y0 = null, d = 0, busy = false;
+  const app = () => $('#app');
+  const can = () => window.scrollY <= 0 && !document.querySelector('.modal') && S.url && S.token && S.data && !busy;
+  const paint = () => {
+    ind.style.transform = 'translate(-50%,' + (d - 56) + 'px)';
+    ind.style.opacity = Math.min(1, d / 36);
+    ind.querySelector('svg').style.transform = 'rotate(' + d * 4 + 'deg)';
+    const ready = d >= TH; ind.classList.toggle('ready', ready);
+    ind.querySelector('span').textContent = ready ? 'Release to sync' : 'Pull to sync';
+    app().style.transform = 'translateY(' + d * 0.7 + 'px)';
+  };
+  function reset() {
+    ind.classList.remove('spin', 'ready');
+    ind.style.transition = 'transform .4s var(--ease),opacity .25s'; app().style.transition = 'transform .4s var(--ease)';
+    ind.style.transform = 'translate(-50%,-64px)'; ind.style.opacity = 0; app().style.transform = '';
+    setTimeout(() => { ind.style.transition = ''; app().style.transition = ''; }, 420);
+  }
+  window.addEventListener('touchstart', (e) => { y0 = can() && e.touches.length === 1 ? e.touches[0].clientY : null; d = 0; }, { passive: true });
+  window.addEventListener('touchmove', (e) => {
+    if (y0 === null) return;
+    const dy = e.touches[0].clientY - y0;
+    if (dy <= 0 || window.scrollY > 0) { if (d) { d = 0; reset(); } return; }
+    e.preventDefault();
+    d = Math.min(110, dy * 0.5); paint();
+  }, { passive: false });
+  window.addEventListener('touchend', async () => {
+    if (y0 === null) return; y0 = null;
+    if (d < TH) { d = 0; reset(); return; }
+    busy = true; ind.classList.add('spin'); ind.querySelector('span').textContent = 'Syncing WHOOP & Strava';
+    ind.style.transition = 'transform .3s var(--ease)'; app().style.transition = 'transform .3s var(--ease)';
+    ind.style.transform = 'translate(-50%,8px)'; app().style.transform = 'translateY(56px)';
+    S._shown = null; await load(true); S._shown = null; render();
+    busy = false; d = 0; reset();
+  });
+})();
 if (S.data) normalize(S.data);
 render();
 load();
