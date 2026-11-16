@@ -162,17 +162,18 @@ function form(title, fields, okLabel) {
       '<label for="ff' + i + '" class="mut small">' + esc(f.label) + '</label><input id="ff' + i + '" type="' + (f.type || 'text') + '" ' + (f.attrs || '') + ' value="' + esc(f.value || '') + '">').join('') +
       '<p class="err" id="ferr" role="alert"></p><div class="row"><button type="button" data-f="cancel">Cancel</button><button type="button" class="p" data-f="ok">' + esc(okLabel || 'Save') + '</button></div></div>';
     document.body.appendChild(m);
+    const close = (v) => { m.classList.add('closing'); setTimeout(() => m.remove(), 220); resolve(v); };
     const first = m.querySelector('input'); if (first) setTimeout(() => first.focus(), 50);
     m.addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-f]');
       if (!b && ev.target !== m) return;
-      if (!b || b.dataset.f === 'cancel') { m.remove(); resolve(null); return; }
+      if (!b || b.dataset.f === 'cancel') { close(null); return; }
       const vals = fields.map((f, i) => m.querySelector('#ff' + i).value.trim());
       for (let i = 0; i < fields.length; i++) {
         const err = fields[i].check ? fields[i].check(vals[i]) : '';
         if (err) { m.querySelector('#ferr').textContent = err; m.querySelector('#ff' + i).focus(); return; }
       }
-      m.remove(); resolve(vals);
+      close(vals);
     });
   });
 }
@@ -204,18 +205,20 @@ function greeting() { const h = local().hour; return h < 12 ? 'Good morning' : h
 function viewToday() {
   const ds = todayStr(), d = D(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p;
   const w = whoopFor(ds), ch = verdictChoice(ds);
-  let h = '<h1>' + greeting() + ', ' + esc(c.name || '') + '</h1><p class="sub">' + dow(ds) + ' ' + ds + (p ? ' · Week ' + p.week : '') +
+  let h = '<div class="eyebrow"><img src="icon-192.png" alt="" class="mark">APEX</div><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1><p class="sub">' + dow(ds) + ' ' + ds + (p ? ' · Week ' + p.week : '') +
     ' · ' + (S.busy ? 'syncing...' : 'updated ' + esc(ago(c.last_sync_ok))) + (S.queue.length ? ' · ' + S.queue.length + ' waiting to upload' : '') + '</p>';
   h += syncBanner() + tzBanner();
 
   if (w && w.verdict) {
     const rec = Number(w.recovery) || 0;
-    const msg = { keep: 'Keep today\'s plan.', reduce: 'Reduce: last block removed, about 80% weights.', swap: 'Swap to Active Recovery today.' }[w.verdict];
-    h += '<div class="card"><span class="pill ' + w.verdict + '">' + w.verdict.toUpperCase() + '</span><div class="vbig">Recovery ' + rec + '%</div><div class="bar" role="img" aria-label="Recovery ' + rec + ' percent"><i style="width:' + rec + '%"></i></div>' +
-      '<p class="mut" style="margin:8px 0 4px">' + esc(w.reason) + '</p><p style="margin:4px 0 8px"><b>' + esc(msg) + '</b></p>';
-    if (w.verdict !== 'keep' && !ch) h += '<div class="row"><button class="g" data-act="vacc">Accept change</button><button data-act="vrej">Keep original</button></div>';
+    const msg = { keep: 'Train as planned', reduce: 'Go lighter today', swap: 'Recovery day' }[w.verdict];
+    const how = { keep: 'Your body is ready. Full session.', reduce: 'Last block removed and about 80% of your weights.', swap: 'Swap today\'s session for Active Recovery.' }[w.verdict];
+    const off = (326.7 * (1 - Math.min(100, Math.max(0, rec)) / 100)).toFixed(1);
+    h += '<section class="card hero" aria-label="Today verdict"><div class="hero-row"><div class="ring" role="img" aria-label="Recovery ' + rec + ' percent"><svg viewBox="0 0 120 120"><circle class="trk" cx="60" cy="60" r="52"/><circle class="val" cx="60" cy="60" r="52" style="--off:' + off + '"/></svg><div class="ring-num"><b>' + rec + '</b><span>%</span></div></div>' +
+      '<div><span class="pill ' + w.verdict + '">' + w.verdict.toUpperCase() + '</span><h3>' + esc(msg) + '</h3><p class="mut small" style="margin:0">' + esc(how) + '</p></div></div><p class="mut">' + esc(w.reason) + '</p>';
+    if (w.verdict !== 'keep' && !ch) h += '<div class="row" style="margin-top:20px"><button class="g" data-act="vacc">Accept</button><button data-act="vrej">Keep plan</button></div>';
     else if (ch) h += '<p class="mut small">You chose: ' + (ch === 'accepted' ? 'accept the change' : 'keep the original plan') + ' <button class="sm" data-act="vundo">Change</button></p>';
-    h += '</div>';
+    h += '</section>';
   } else {
     const last = d.whoop[d.whoop.length - 1];
     h += '<div class="card"><h3>No WHOOP score for today yet</h3><p class="mut">It appears after you wake and WHOOP syncs. Tap Sync now in More.' + (last ? ' Last score: ' + esc(last.recovery) + '% on ' + esc(last.date) + ' (' + daysBetween(last.date, ds) + ' day(s) old).' : '') + '</p></div>';
@@ -226,24 +229,24 @@ function viewToday() {
     h += '<h2>Workout</h2><div class="card"><h3>' + esc(ses.name) + '</h3><p class="mut">' + esc(ses.mode === 'swap' ? 'Recovery' : p.load) + ' · ' + esc(p.time) + '</p>';
     if (wl) h += '<p><span class="pill keep">' + esc(wl.status) + '</span> ' + esc(wl.time) + ' <button class="sm" data-act="wundo">Undo</button></p>';
     else h += '<div class="row"><button class="g" data-act="wdone">Did it</button><button data-act="wskip">Skipped</button></div>';
-    h += '<details style="margin-top:10px"' + (ses.mode !== 'plan' ? ' open' : '') + '><summary class="mut">See the full session</summary><div class="det">' + parseDetails(ses.details) + '</div></details></div>';
+    h += '<details style="margin-top:12px"' + (ses.mode !== 'plan' ? ' open' : '') + '><summary class="mut">See the full session</summary><div class="det">' + parseDetails(ses.details) + '</div></details></div>';
 
     const ms = mealsFor(p.daytype), ml = logs('MealLog', ds);
     const done = ms.filter((m) => ml.find((r) => r.slot === m.slot));
     const next = ms.find((m) => !ml.find((r) => r.slot === m.slot));
-    h += '<h2>Meals</h2><div class="card">';
+    h += '<h2>Meals</h2><div class="card' + (S.flash === 'meal' ? ' pop' : '') + '">';
     done.forEach((m) => {
       const r = ml.find((x) => x.slot === m.slot);
       h += '<div class="done-m row sp"><span>✓ ' + esc(m.name) + ' · ' + esc(r.status) + (r.note ? ' (' + esc(r.note) + ')' : '') + (r.time ? ' at ' + esc(r.time) : '') + '</span><button class="sm fit" data-act="mundo" data-slot="' + esc(m.slot) + '" aria-label="Undo ' + esc(m.name) + '">Undo</button></div>';
     });
     if (next) {
-      h += '<div style="margin-top:8px"><span class="mut small">Planned ' + esc(next.time) + '</span><h3>' + esc(next.name) + '</h3><p style="margin:2px 0 6px">' + esc(next.items) + '</p>' +
+      h += '<div style="margin-top:16px"><span class="mut small">Planned ' + esc(next.time) + '</span><h3>' + esc(next.name) + '</h3><p style="margin:2px 0 6px">' + esc(next.items) + '</p>' +
         (next.supps ? '<p class="mut small">Supplements: ' + esc(next.supps) + '</p>' : '') +
-        '<label for="mt" class="mut small">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '">' +
-        '<div class="row" style="margin-top:8px"><button class="g" data-act="mate" data-slot="' + esc(next.slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(next.slot) + '">Skipped</button><button data-act="mswap" data-slot="' + esc(next.slot) + '">Swap</button></div></div>';
+        '<label for="mt" class="mut small" style="margin:16px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '">' +
+        '<div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(next.slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(next.slot) + '">Skipped</button><button data-act="mswap" data-slot="' + esc(next.slot) + '">Swap</button></div></div>';
     } else h += '<p><b>All meals logged for today.</b></p>';
     ml.filter((r) => r.status === 'extra').forEach((r) => (h += '<div class="done-m row sp"><span>+ ' + esc(r.extra_name) + ' · ' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</span><button class="sm fit" data-act="mundo" data-slot="' + esc(r.slot) + '" aria-label="Delete ' + esc(r.extra_name) + '">Delete</button></div>'));
-    h += '<button class="sm" style="margin-top:10px;width:100%" data-act="mextra">+ Extra meal or snack</button>';
+    h += '<button class="sm" style="margin-top:20px;width:100%" data-act="mextra">+ Extra meal or snack</button>';
     const tg = targetFor(p.daytype);
     const eaten = ml.reduce((a, r) => {
       if (r.status === 'skipped') return a;
@@ -251,12 +254,12 @@ function viewToday() {
       const m = ms.find((x) => x.slot === r.slot); return a + (m ? Number(m.kcal) || 0 : 0);
     }, 0);
     const pct = Math.min(100, (eaten / (Number(tg.kcal) || 1)) * 100);
-    h += '<p class="mut small" style="margin:10px 0 4px">' + eaten + ' / ' + esc(tg.kcal || '?') + ' kcal · protein target ' + esc(tg.protein || '?') + ' g' + (eaten > Number(tg.kcal) ? ' · over target' : '') + '</p><div class="bar" role="img" aria-label="' + Math.round(pct) + ' percent of calories"><i style="width:' + pct + '%"></i></div></div>';
+    h += '<p class="mut small" style="margin:24px 0 4px">' + eaten + ' / ' + esc(tg.kcal || '?') + ' kcal · protein target ' + esc(tg.protein || '?') + ' g' + (eaten > Number(tg.kcal) ? ' · over target' : '') + '</p><div class="bar" role="img" aria-label="' + Math.round(pct) + ' percent of calories"><i style="width:' + pct + '%"></i></div></div>';
   }
 
   const bot = Number(c.bottle_ml) || 750, tgt = Number(dow(ds) === 'Sat' ? c.water_target_rest : c.water_target_train) || 4000;
   const wr = logs('WaterLog', ds)[0], ml2 = wr ? Number(wr.ml) : 0, n = Math.ceil(tgt / bot), f = Math.floor(ml2 / bot);
-  h += '<h2>Water</h2><div class="card"><div class="row sp"><b>' + (ml2 / 1000).toFixed(2) + ' L</b><span class="mut">target ' + (tgt / 1000).toFixed(1) + ' L' + (ml2 >= tgt ? ' · done ✓' : '') + '</span></div><div class="bottles" role="img" aria-label="' + f + ' of ' + n + ' bottles">';
+  h += '<h2>Water</h2><div class="card' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp"><span class="big">' + (ml2 / 1000).toFixed(2) + ' L</span><span class="mut">target ' + (tgt / 1000).toFixed(1) + ' L' + (ml2 >= tgt ? ' · done ✓' : '') + '</span></div><div class="bottles" role="img" aria-label="' + f + ' of ' + n + ' bottles">';
   for (let i = 0; i < Math.max(n, f); i++) h += '<div class="bt ' + (i < f ? 'f' : '') + '"></div>';
   h += '</div><div class="row"><button data-act="wminus" ' + (ml2 <= 0 ? 'disabled' : '') + '>- bottle</button><button class="p" data-act="wplus">+ bottle (' + bot + ' ml)</button></div></div>';
 
@@ -280,8 +283,8 @@ function viewMeals() {
     let g = '';
     d.shopping.filter((s) => s.period === per).forEach((s, i) => {
       const k = 'shop-' + periodKey(per) + '-' + per + s.item, chk = LS.getItem(k) === '1';
-      if (s.group !== g) { g = s.group; h += '<div class="mut small" style="margin-top:8px">' + esc(g) + '</div>'; }
-      h += '<label class="row" style="padding:6px 0" for="sh' + per + i + '"><input id="sh' + per + i + '" type="checkbox" class="fit chk" data-shop="' + esc(k) + '" ' + (chk ? 'checked' : '') + '><span style="' + (chk ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(s.item) + '</span></label>';
+      if (s.group !== g) { g = s.group; h += '<div class="mut small" style="margin-top:16px">' + esc(g) + '</div>'; }
+      h += '<label class="row" style="padding:12px 0;gap:14px" for="sh' + per + i + '"><input id="sh' + per + i + '" type="checkbox" class="fit chk" data-shop="' + esc(k) + '" ' + (chk ? 'checked' : '') + '><span style="' + (chk ? 'text-decoration:line-through;opacity:.6' : '') + '">' + esc(s.item) + '</span></label>';
     });
     h += '</div>';
   });
@@ -330,7 +333,7 @@ function viewInsights() {
       return '<div class="col"><span class="v">' + (c.w ? r : '') + '</span><i style="height:' + (c.w ? Math.max(3, Math.round(r * 0.9)) : 0) + 'px;background:' + (r >= 67 ? 'var(--ok)' : r >= 34 ? 'var(--warn)' : 'var(--bad)') + '"></i><span class="d">' + c.ds.slice(8) + '</span></div>';
     }).join('') + '</div><p class="mut small">Green 67%+ · yellow 34–66% · red 33% and under. Empty column = no score that day.</p>';
     const last = d.whoop[d.whoop.length - 1], age = daysBetween(last.date, today);
-    h += '<p class="small" style="margin-top:8px">Latest ' + esc(last.date) + (age > 0 ? ' <b class="warnt">(' + age + ' day' + (age > 1 ? 's' : '') + ' old)</b>' : ' (today)') + ': HRV ' + esc(last.hrv) + ' ms · RHR ' + esc(last.rhr) + ' · sleep ' + esc(last.sleep_hours) + ' h (' + esc(last.sleep_perf) + '%) · strain ' + esc(last.strain) + '</p>';
+    h += '<p class="small" style="margin-top:16px">Latest ' + esc(last.date) + (age > 0 ? ' <b class="warnt">(' + age + ' day' + (age > 1 ? 's' : '') + ' old)</b>' : ' (today)') + ': HRV ' + esc(last.hrv) + ' ms · RHR ' + esc(last.rhr) + ' · sleep ' + esc(last.sleep_hours) + ' h (' + esc(last.sleep_perf) + '%) · strain ' + esc(last.strain) + '</p>';
   }
   h += '</div><h2>Suggested changes</h2>';
   if (!d.suggestions.length) h += '<div class="card mut">Nothing waiting. Any change to your plan shows up here first, and nothing changes until you accept it.</div>';
@@ -338,7 +341,7 @@ function viewInsights() {
   const b = d.logs.Body.slice(-10).reverse();
   h += '<h2>Weight</h2><div class="card">' + (b.length ? b.map((x) => '<div class="row sp small"><span>' + esc(x.date) + '</span><span class="fit">' + esc(x.weight) + ' kg' + (x.waist ? ' · waist ' + esc(x.waist) + ' cm' : '') + '</span></div>').join('') : '<p class="mut">No entries yet.</p>') + '</div>';
   if (S.failed.length) {
-    h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:8px" data-act="clearfail">Clear</button></div>';
+    h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:16px" data-act="clearfail">Clear</button></div>';
   }
   return h;
 }
@@ -348,8 +351,8 @@ function viewMore() {
   let h = '<h1>More</h1><h2>Sync</h2><div class="card"><div class="row"><button class="p" data-act="sync">Sync now</button><button data-act="reload">Reload</button></div>' +
     '<p class="mut small">Last sync: ' + esc(ago(c.last_sync)) + ' · last good sync: ' + esc(ago(c.last_sync_ok)) + '</p><p class="mut small">The sheet pulls WHOOP and Strava by itself around 07:00, 08:00 and 18:00 Cairo time.</p></div>';
   h += syncBanner();
-  h += '<h2>Connections</h2><div class="card"><div class="row sp"><span>WHOOP</span><span class="pill ' + (d.connected.whoop ? 'keep' : 'swap') + '">' + (d.connected.whoop ? 'connected' : 'not connected') + '</span></div><div class="row sp" style="margin-top:8px"><span>Strava</span><span class="pill ' + (d.connected.strava ? 'keep' : 'swap') + '">' + (d.connected.strava ? 'connected' : 'not connected') + '</span></div>' +
-    '<p class="mut small">Apex only asks WHOOP for recovery, cycles (strain) and sleep, and Strava for your activities. Both are read-only.</p><div class="row" style="margin-top:10px"><button data-act="cw">Connect WHOOP</button><button data-act="cs">Connect Strava</button></div></div>';
+  h += '<h2>Connections</h2><div class="card"><div class="row sp"><span>WHOOP</span><span class="pill ' + (d.connected.whoop ? 'keep' : 'swap') + '">' + (d.connected.whoop ? 'connected' : 'not connected') + '</span></div><div class="row sp" style="margin-top:16px"><span>Strava</span><span class="pill ' + (d.connected.strava ? 'keep' : 'swap') + '">' + (d.connected.strava ? 'connected' : 'not connected') + '</span></div>' +
+    '<p class="mut small">Apex only asks WHOOP for recovery, cycles (strain) and sleep, and Strava for your activities. Both are read-only.</p><div class="row" style="margin-top:20px"><button data-act="cw">Connect WHOOP</button><button data-act="cs">Connect Strava</button></div></div>';
   h += '<h2>Log body</h2><div class="card"><button class="p" style="width:100%" data-act="body">Log weight and waist</button></div>';
   h += '<h2>Events</h2>';
   d.events.forEach((e) => {
@@ -362,20 +365,31 @@ function viewMore() {
 }
 
 function viewSetup() {
-  return '<h1>Apex setup</h1><p class="sub">Paste the two things from your Google Sheet setup (SETUP.md, steps 3 and 4).</p><div class="card"><label for="su" class="mut small">Web app URL (ends in /exec)</label><input id="su" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"><label for="st" class="mut small" style="display:block;margin-top:10px">Token (api_token in the Config tab)</label><input id="st" autocomplete="off" placeholder="token"><button class="p" style="width:100%;margin-top:12px" data-act="connect">Connect</button></div>';
+  return '<div class="eyebrow"><img src="icon-192.png" alt="" class="mark">APEX</div><h1>Welcome</h1><p class="sub">Paste the two things from your Google Sheet setup (SETUP.md, steps 3 and 4).</p><div class="card"><label for="su" class="mut small" style="margin-bottom:8px">Web app URL (ends in /exec)</label><input id="su" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec"><label for="st" class="mut small" style="display:block;margin:20px 0 8px">Token (api_token in the Config tab)</label><input id="st" autocomplete="off" placeholder="token"><button class="p" style="width:100%;margin-top:24px" data-act="connect">Connect</button></div>';
 }
 
 const VIEWS = { today: viewToday, meals: viewMeals, train: viewTrain, insights: viewInsights, more: viewMore };
-const TABS = [['today', '🏠', 'Today'], ['meals', '🍽', 'Meals'], ['train', '💪', 'Train'], ['insights', '📈', 'Insights'], ['more', '⚙️', 'More']];
+const ICON = (d) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+const TABS = [
+  ['today', ICON('<circle cx="12" cy="12" r="8.5"/><path d="M8.5 14.5 12 8l3.5 6.5"/>'), 'Today'],
+  ['meals', ICON('<path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8a2 2 0 0 1-2 2M9 3v6"/><path d="M17 21V3c-2 1.5-3 4-3 7v3h3"/>'), 'Meals'],
+  ['train', ICON('<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>'), 'Train'],
+  ['insights', ICON('<path d="M4 20h16"/><path d="M7 16v-4M12 16V7M17 16v-7"/>'), 'Insights'],
+  ['more', ICON('<circle cx="5.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18.5" cy="12" r="1.3"/>'), 'More']
+];
 
 function render() {
   const app = $('#app'), tabs = $('#tabs');
   if (!S.url || !S.token) { app.innerHTML = viewSetup(); tabs.style.display = 'none'; return; }
   tabs.style.display = 'flex';
-  tabs.innerHTML = TABS.map((t) => '<button class="' + (S.tab === t[0] ? 'on' : '') + '" aria-label="' + t[2] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + ' data-act="tab" data-t="' + t[0] + '"><b aria-hidden="true">' + t[1] + '</b><span aria-hidden="true">' + t[2] + '</span></button>').join('');
+  tabs.innerHTML = TABS.map((t) => '<button class="' + (S.tab === t[0] ? 'on' : '') + '" aria-label="' + t[2] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + ' data-act="tab" data-t="' + t[0] + '">' + t[1] + '<span aria-hidden="true">' + t[2] + '</span></button>').join('');
   if (!S.data) { app.innerHTML = '<h1>Loading...</h1><p class="sub">First load can take a few seconds.</p>'; return; }
-  const y = window.scrollY;
+  const y = window.scrollY, key = S.tab + '|' + (S.viewDay || '') + '|' + (S.libTab || ''), fresh = S._shown !== key;
+  S._shown = key;
   try { app.innerHTML = VIEWS[S.tab](); } catch (e) { app.innerHTML = '<div class="card">Display error: ' + esc(e.message) + '</div>'; }
+  app.classList.remove('enter');
+  if (fresh) { void app.offsetWidth; app.classList.add('enter'); }
+  S.flash = null;
   window.scrollTo(0, y);
 }
 
@@ -407,7 +421,7 @@ document.addEventListener('click', async (ev) => {
     case 'vundo': S.data.verdicts = S.data.verdicts.filter((v) => v.id !== 'verdict-' + ds); save(); render(); break;
     case 'wdone': case 'wskip': send({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: a === 'wdone' ? 'done' : 'skipped', note: ses.mode, time: nowTime() } }); break;
     case 'wundo': send({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: ses.name } }); break;
-    case 'mate': send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
+    case 'mate': S.flash = 'meal'; send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
     case 'mskip': send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'skipped', time: '', note: '', extra_name: '', kcal: '' } }); break;
     case 'mundo': send({ action: 'del', table: 'MealLog', row: { date: ds, slot: el.dataset.slot } }); break;
     case 'mswap': {
@@ -426,7 +440,7 @@ document.addEventListener('click', async (ev) => {
       const nv = Math.max(0, cur + (a === 'wplus' ? bot : -bot));
       if (nv > LIM.waterMax) { toast('That would be over 10 L today. Not added.', 3000); break; }
       if (a === 'wplus' && cur < LIM.waterWarn && nv >= LIM.waterWarn && !confirm('Over 6 L today. Too much water too fast can be dangerous. Add anyway?')) break;
-      send({ action: 'log', table: 'WaterLog', row: { date: ds, ml: nv, time: nowTime() } }); break;
+      S.flash = 'water'; send({ action: 'log', table: 'WaterLog', row: { date: ds, ml: nv, time: nowTime() } }); break;
     }
     case 'feel': send({ action: 'log', table: 'Checkin', row: { date: ds, feel: el.dataset.v } }); break;
     case 'body': {
