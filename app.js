@@ -406,7 +406,7 @@ document.addEventListener('keydown', (ev) => {
 function mealSheet(slot) {
   const ds = todayStr(), p = planFor(ds); if (!p) return;
   const m = mealsFor(p.daytype).find((x) => x.slot === slot), r = logs('MealLog', ds).find((x) => x.slot === slot);
-  if (!m) { if (r) infoSheet(r.extra_name || 'Snack', '<p class="mut">' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</p><button class="r" style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Delete</button>'); return; }
+  if (!m) { if (r) infoSheet(r.extra_name || 'Snack', '<p class="mut">' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</p>' + (r.note ? '<p class="small" style="margin-top:8px">' + esc(r.note).replace(/; /g, '<br>') + '</p>' : '') + '<button class="r" style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Delete</button>'); return; }
   let b = '<p class="mut small">Planned ' + esc(m.time) + ' · ' + esc(m.kcal) + ' kcal</p><p style="margin:12px 0">' + esc(m.items) + '</p>' + (m.supps ? '<p class="supps">Supplements · ' + esc(m.supps) + '</p>' : '');
   if (r) b += '<div class="row sp" style="margin-top:20px"><span class="pill ' + (r.status === 'skipped' ? 'swap' : 'keep') + '">' + esc(r.status.toUpperCase()) + (r.time ? ' · ' + esc(r.time) : '') + '</span>' + (r.note ? '<span class="mut small">' + esc(r.note) + '</span>' : '') + '</div><button style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Undo</button>';
   else b += '<label for="mt" class="mut small" style="margin:20px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '"><div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(slot) + '">Swap</button></div>';
@@ -704,7 +704,6 @@ document.addEventListener('click', async (ev) => {
   if (el.closest('.modal.info') && !el.closest('[data-close]') && KEEP.indexOf(a) < 0) closeSheets();
   const ds = todayStr(), ses = S.data && sessionFor(ds);
   const timeVal = () => { const i = $('#mt'); return (i && /^\d{2}:\d{2}$/.test(i.value) && i.value) || nowTime(); };
-  const kcalField = (label) => ({ label: label || 'Calories (kcal)', type: 'number', attrs: 'inputmode="numeric" min="0" max="5000"', check: range('Calories', LIM.kcal[0], LIM.kcal[1]) });
   switch (a) {
     case 'tab': S.tab = el.dataset.t; S.viewDay = null; render(); window.scrollTo(0, 0); break;
     case 'connect': {
@@ -726,17 +725,8 @@ document.addEventListener('click', async (ev) => {
     case 'mate': S.flash = 'meal'; send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
     case 'mskip': send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'skipped', time: '', note: '', extra_name: '', kcal: '' } }); break;
     case 'mundo': send({ action: 'del', table: 'MealLog', row: { date: ds, slot: el.dataset.slot } }); break;
-    case 'mswap': {
-      const slot = el.dataset.slot, tm = timeVal();
-      const v = await form('What did you eat instead?', [{ label: 'Food', check: need('Food'), attrs: 'maxlength="120"' }, kcalField()]);
-      if (!v) break;
-      send({ action: 'log', table: 'MealLog', row: { date: ds, slot, status: 'swap', time: tm, note: v[0], extra_name: '', kcal: String(Number(v[1])) } }); break;
-    }
-    case 'mextra': {
-      const v = await form('Extra meal or snack', [{ label: 'What was it?', check: need('Name'), attrs: 'maxlength="120"' }, kcalField(), { label: 'Time', type: 'time', value: nowTime(), check: (x) => (/^\d{2}:\d{2}$/.test(x) ? '' : 'Pick a time') }]);
-      if (!v) break;
-      send({ action: 'log', table: 'MealLog', row: { date: ds, slot: 'extra-' + Date.now(), status: 'extra', time: v[2], note: '', extra_name: v[0], kcal: String(Number(v[1])) } }); break;
-    }
+    case 'mswap': foodOpen('swap', el.dataset.slot, timeVal()); break;
+    case 'mextra': foodOpen('extra'); break;
     case 'wplus': case 'wminus': {
       const bot = Number(S.data.cfg.bottle_ml) || 750, cur = Number((logs('WaterLog', ds)[0] || {}).ml) || 0;
       const nv = Math.max(0, cur + (a === 'wplus' ? bot : -bot));

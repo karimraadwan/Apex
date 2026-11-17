@@ -669,3 +669,13 @@ select{-webkit-appearance:none;appearance:none;padding-right:36px;background-ima
 .pday .wo{margin-bottom:var(--s3)}
 .rec{background:var(--card);border-color:var(--sep)}
 .draft .chev{color:var(--tx2)}
+/* food log */
+.frow{background:var(--card2);border-radius:var(--r2);padding:var(--s3) var(--s4) var(--s4);margin-top:var(--s3)}
+.frow-h{display:flex;justify-content:space-between;align-items:center;min-height:44px}
+.frow-h b{font-size:.85rem;color:var(--tx2)}
+.frow input{background:var(--card)}.frow input + input{margin-top:var(--s2)}
+.fadd{width:100%;margin-top:var(--s3);display:flex;align-items:center;justify-content:center;gap:6px}
+.fest .li{min-height:64px}
+.kin{width:84px;min-height:44px;padding:6px 10px;text-align:right;background:var(--card)}
+.fest .li-end{display:flex;align-items:center;gap:6px}
+.ftot b{font-size:1rem}

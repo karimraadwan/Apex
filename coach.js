@@ -450,3 +450,73 @@ function keepScroll(id, body) {
 }
 function wizRefreshKeep() { wizSave(); keepScroll('wiz', wizBody()); }
 function progRefreshKeep() { keepScroll('prog', progBody()); }
+
+/* ---------- food log: type what you ate, Claude estimates the calories ---------- */
+function foodOpen(mode, slot, time) {
+  const m = mode === 'swap' && D().plan ? mealsFor((planFor(todayStr()) || {}).daytype).find((x) => x.slot === slot) : null;
+  S.food = { mode, slot, time: time || nowTime(), rows: [{ name: '', qty: '' }], est: null, busy: false, err: '', planned: m ? m.name : '' };
+  infoSheet(mode === 'swap' ? 'What did you eat instead?' : 'Extra meal or snack', foodBody(), 'food');
+}
+function foodBody() {
+  const F = S.food, ai = D().ai;
+  let h = F.planned ? '<p class="mut small">Instead of ' + esc(F.planned) + '.</p>' : '';
+  if (!F.est) {
+    h += '<p class="mut small">Write each food and roughly how much. ' + (ai ? 'I work out the average calories for you.' : 'Add your Claude API key to get calories worked out for you; for now type them in.') + '</p>';
+    h += F.rows.map((r, i) => '<div class="frow"><div class="frow-h"><b>Food ' + (i + 1) + '</b>' + (F.rows.length > 1 ? '<button class="txt fit" data-act="fdel" data-i="' + i + '" aria-label="Remove food ' + (i + 1) + '">Remove</button>' : '') + '</div>' +
+      '<input data-fn="' + i + '" maxlength="80" value="' + esc(r.name) + '" placeholder="e.g. Koshary, chicken shawarma, banana" aria-label="Food ' + (i + 1) + '">' +
+      '<input data-fq="' + i + '" maxlength="40" value="' + esc(r.qty) + '" placeholder="Amount, e.g. 1 plate, 200 g, 2 pieces" aria-label="Amount of food ' + (i + 1) + '">' +
+      (ai ? '' : '<input data-fk="' + i + '" type="number" inputmode="numeric" min="0" max="3000" value="' + esc(r.kcal || '') + '" placeholder="Calories (kcal)" aria-label="Calories of food ' + (i + 1) + '">') + '</div>').join('');
+    h += '<button class="sm fadd" data-act="fadd"' + (F.rows.length >= 12 ? ' disabled' : '') + '>' + ICON(I.plus, 'ib') + ' Add another food</button>';
+    if (F.mode === 'extra') h += '<label class="mut small" for="ftime">Time</label><input type="time" id="ftime" data-ft="1" value="' + esc(F.time) + '">';
+    h += '<p class="err" role="alert">' + esc(F.err) + '</p>';
+    h += ai ? '<button class="p" style="width:100%" data-act="fcalc"' + (F.busy ? ' disabled' : '') + '>' + (F.busy ? 'Working out calories…' : ICON(CI.spark, 'ib') + ' Calculate calories') + '</button>' : '<button class="p" style="width:100%" data-act="fsave">Save</button>';
+    return h;
+  }
+  const E = F.est;
+  h += '<div class="card list flat fest">' + E.items.map((x, i) => '<div class="li"><span class="li-main"><b>' + esc(x.name) + '</b><span class="mut small">' + esc(x.qty) + (x.protein ? ' · ' + x.protein + ' g protein' : '') + '</span></span><span class="li-end"><input class="kin" data-fk="' + i + '" type="number" inputmode="numeric" min="0" max="3000" value="' + x.kcal + '" aria-label="Calories for ' + esc(x.name) + '"><span class="mut small">kcal</span></span></div>').join('') +
+    '<div class="li ftot"><span class="li-main"><b>Total</b>' + (E.protein ? '<span class="mut small">' + E.protein + ' g protein</span>' : '') + '</span><span class="li-end"><b id="ftotal">' + E.kcal + ' kcal</b></span></div></div>' +
+    '<p class="mut small" style="margin-top:12px">Average estimates. Tap a number to correct it.</p><p class="err" role="alert">' + esc(F.err) + '</p>' +
+    '<div class="row"><button data-act="fedit">Edit foods</button><button class="p" data-act="fsave">Save</button></div>';
+  return h;
+}
+function foodInput(el) {
+  const F = S.food; if (!F) return;
+  if (el.dataset.fn !== undefined) F.rows[el.dataset.fn].name = el.value;
+  else if (el.dataset.fq !== undefined) F.rows[el.dataset.fq].qty = el.value;
+  else if (el.dataset.ft) F.time = el.value;
+  else if (el.dataset.fk !== undefined) {
+    const v = Math.max(0, Math.min(3000, Math.round(Number(el.value) || 0)));
+    if (F.est) { F.est.items[el.dataset.fk].kcal = v; F.est.kcal = F.est.items.reduce((a, x) => a + x.kcal, 0); const t = $('#ftotal'); if (t) t.textContent = F.est.kcal + ' kcal'; }
+    else F.rows[el.dataset.fk].kcal = v;
+  }
+}
+document.addEventListener('input', (ev) => { if (ev.target.closest && ev.target.closest('.modal.info[data-id="food"]')) foodInput(ev.target); });
+function foodRefresh() { keepScroll('food', foodBody()); }
+async function foodCalc() {
+  const F = S.food, rows = F.rows.filter((r) => r.name.trim());
+  if (!rows.length) { F.err = 'Write at least one food'; foodRefresh(); return; }
+  F.busy = true; F.err = ''; foodRefresh();
+  try { const j = await call({ action: 'food_estimate', items: rows.map((r) => ({ name: r.name.trim(), qty: r.qty.trim() })) }); F.est = { items: j.items, kcal: j.kcal, protein: j.protein }; }
+  catch (e) { F.err = e.message === 'offline' ? 'You are offline. Try again when connected.' : e.message; }
+  F.busy = false; foodRefresh();
+}
+function foodSave() {
+  const F = S.food, ds = todayStr();
+  const items = F.est ? F.est.items : F.rows.filter((r) => r.name.trim()).map((r) => ({ name: r.name.trim(), qty: r.qty.trim(), kcal: Number(r.kcal) || 0 }));
+  if (!items.length) { F.err = 'Write at least one food'; foodRefresh(); return; }
+  if (F.mode === 'extra' && !/^\d{2}:\d{2}$/.test(F.time)) { F.err = 'Pick a time'; foodRefresh(); return; }
+  const kcal = Math.min(5000, items.reduce((a, x) => a + (Number(x.kcal) || 0), 0));
+  const note = items.map((x) => x.name + (x.qty ? ' (' + x.qty + ')' : '') + ' ' + (Number(x.kcal) || 0) + ' kcal').join('; ').slice(0, 400);
+  const names = items.map((x) => x.name).join(' + ').slice(0, 120);
+  if (F.mode === 'swap') send({ action: 'log', table: 'MealLog', row: { date: ds, slot: F.slot, status: 'swap', time: F.time, note, extra_name: '', kcal: String(kcal) } });
+  else send({ action: 'log', table: 'MealLog', row: { date: ds, slot: 'extra-' + Date.now(), status: 'extra', time: F.time, note, extra_name: names, kcal: String(kcal) } });
+  S.food = null; closeSheets(); toast('Saved · ' + kcal + ' kcal');
+}
+COACH_KEEP.push('fadd', 'fdel', 'fcalc', 'fedit', 'fsave');
+Object.assign(COACH_ACTS, {
+  fadd: () => { S.food.rows.push({ name: '', qty: '' }); foodRefresh(); const ins = document.querySelectorAll('[data-fn]'); if (ins.length) ins[ins.length - 1].focus(); },
+  fdel: (el) => { S.food.rows.splice(Number(el.dataset.i), 1); foodRefresh(); },
+  fcalc: () => foodCalc(),
+  fedit: () => { S.food.est = null; S.food.err = ''; foodRefresh(); },
+  fsave: () => foodSave()
+});
