@@ -44,7 +44,7 @@ function coachCard() {
   let h = '<h2>Coach</h2><section class="card coach" aria-live="polite">';
   if (!d.ai) return h + '<div class="coach-empty"><span class="coach-ic">' + ICON(CI.spark) + '</span><div><b>Feedback after every run and workout</b><p class="mut small">Add your Claude API key (SETUP.md, part 9). Then after each WHOOP and Strava sync I review your newest session here.</p></div></div></section>';
   h += fresh ? fbHTML(f) : '<div class="coach-empty"><span class="coach-ic">' + ICON(CI.spark) + '</span><div><b>No new feedback yet</b><p class="mut small">After each sync I look at your newest run or finished workout. Tap below to ask now.</p></div></div>';
-  return h + '<button class="link-row" data-act="coachnow"' + (S.coachBusy ? ' disabled' : '') + '>' + (S.coachBusy ? 'Looking at your last session…' : fresh ? 'Refresh feedback' : 'Get feedback on my last session') + '<span class="chev">›</span></button></section>';
+  return h + '<button class="link-row" data-act="chatopen">Ask the coach anything<span class="chev">›</span></button><button class="link-row" data-act="coachnow"' + (S.coachBusy ? ' disabled' : '') + '>' + (S.coachBusy ? 'Looking at your last session…' : fresh ? 'Refresh feedback' : 'Get feedback on my last session') + '<span class="chev">›</span></button></section>';
 }
 function weeklyCard(home) {
   const f = latestFb(['weekly']);
@@ -66,6 +66,10 @@ function nextRace() {
   return D().events.filter((e) => e.date && e.date >= t && daysBetween(t, e.date) <= 180).sort((a, b) => (a.date < b.date ? -1 : 1))[0] || null;
 }
 function racePhase(left) { return left <= 10 ? 'Taper' : left <= 28 ? 'Peak' : left <= 63 ? 'Build' : 'Base'; }
+function raceDayLink() {
+  const ev = nextRace(); if (!ev || daysBetween(todayStr(), ev.date) > 14) return '';
+  return '<button class="card eoc" data-act="racedayopen" data-n="' + esc(ev.name) + '" data-d="' + esc(ev.date) + '"><span class="li-ic" style="background:#f59e0b">' + ICON(I.flag) + '</span><span><b>Race-day plan</b><span class="mut small">Pacing per km, food and water for ' + esc(ev.name) + '</span></span><span class="chev">›</span></button>';
+}
 function raceCard() {
   const ev = nextRace(); if (!ev) return '';
   const left = daysBetween(todayStr(), ev.date), ph = racePhase(left);
@@ -182,7 +186,7 @@ function prSave() {
 }
 function prSheet(n) {
   const L = (D().prs || []).filter((r) => r.name === n).sort((a, b) => (a.date < b.date ? 1 : -1)); if (!L.length) return;
-  infoSheet(n, '<div class="card list flat">' + L.map((r) => '<div class="li"><span class="li-main"><b>' + prShow(r.value, r.unit) + '</b><span class="mut small">' + esc(niceDate(r.date)) + (r.note ? ' · ' + esc(r.note) : '') + '</span></span><button class="icon-btn x" data-act="prdel" data-n="' + esc(r.name) + '" data-d="' + esc(r.date) + '" aria-label="Delete result from ' + esc(r.date) + '">✕</button></div>').join('') + '</div><button class="p" style="width:100%;margin-top:20px" data-act="prlogn" data-n="' + esc(n) + '" data-u="' + esc(L[0].unit) + '">Log a new result</button>', 'pr');
+  infoSheet(n, prChart(n) + '<div class="card list flat">' + L.map((r) => '<div class="li"><span class="li-main"><b>' + prShow(r.value, r.unit) + '</b><span class="mut small">' + esc(niceDate(r.date)) + (r.note ? ' · ' + esc(r.note) : '') + '</span></span><button class="icon-btn x" data-act="prdel" data-n="' + esc(r.name) + '" data-d="' + esc(r.date) + '" aria-label="Delete result from ' + esc(r.date) + '">✕</button></div>').join('') + '</div><button class="p" style="width:100%;margin-top:20px" data-act="prlogn" data-n="' + esc(n) + '" data-u="' + esc(L[0].unit) + '">Log a new result</button>', 'pr');
 }
 function confetti() {
   try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; } catch (e) { /* ignore */ }
@@ -470,7 +474,8 @@ function foodBody() {
   const F = S.food, ai = D().ai;
   let h = F.planned ? '<p class="mut small">Instead of ' + esc(F.planned) + '.</p>' : '';
   if (!F.est) {
-    h += '<p class="mut small">Write each food and roughly how much. ' + (ai ? 'I work out the average calories for you.' : 'Add your Claude API key to get calories worked out for you; for now type them in.') + '</p>';
+    h += '<p class="mut small">Write each food and roughly how much. ' + (ai ? 'I work out the average calories for you.' : 'Add your Claude API key to get calories worked out for you; for now type them in.') + '</p>' +
+      (ai ? '<label class="upbtn alt" for="foodcam">' + ICON(LI.cam) + (F.busy ? 'Looking at your photo…' : 'Take a photo of your food') + '</label><input type="file" id="foodcam" accept="image/*" capture="environment" hidden><p class="or"><span>or type it</span></p>' : '');
     h += F.rows.map((r, i) => '<div class="frow"><div class="frow-h"><b>Food ' + (i + 1) + '</b>' + (F.rows.length > 1 ? '<button class="txt fit" data-act="fdel" data-i="' + i + '" aria-label="Remove food ' + (i + 1) + '">Remove</button>' : '') + '</div>' +
       '<input data-fn="' + i + '" maxlength="80" value="' + esc(r.name) + '" placeholder="e.g. Koshary, chicken shawarma, banana" aria-label="Food ' + (i + 1) + '">' +
       '<input data-fq="' + i + '" maxlength="40" value="' + esc(r.qty) + '" placeholder="Amount, e.g. 1 plate, 200 g, 2 pieces" aria-label="Amount of food ' + (i + 1) + '">' +
@@ -517,8 +522,9 @@ function foodSave() {
   const kcal = Math.min(5000, items.reduce((a, x) => a + (Number(x.kcal) || 0), 0));
   const note = items.map((x) => x.name + (x.qty ? ' (' + x.qty + ')' : '') + ' ' + (Number(x.kcal) || 0) + ' kcal').join('; ').slice(0, 400);
   const names = items.map((x) => x.name).join(' + ').slice(0, 120);
-  if (F.mode === 'swap') send({ action: 'log', table: 'MealLog', row: { date: ds, slot: F.slot, status: 'swap', time: F.time, note, extra_name: '', kcal: String(kcal) } });
-  else send({ action: 'log', table: 'MealLog', row: { date: ds, slot: 'extra-' + Date.now(), status: 'extra', time: F.time, note, extra_name: names, kcal: String(kcal) } });
+  const prot = String(Math.min(400, items.reduce((a, x) => a + (Number(x.protein) || 0), 0)));
+  if (F.mode === 'swap') send({ action: 'log', table: 'MealLog', row: { date: ds, slot: F.slot, status: 'swap', time: F.time, note, extra_name: '', kcal: String(kcal), protein: prot } });
+  else send({ action: 'log', table: 'MealLog', row: { date: ds, slot: 'extra-' + Date.now(), status: 'extra', time: F.time, note, extra_name: names, kcal: String(kcal), protein: prot } });
   S.food = null; closeSheets(); toast('Saved · ' + kcal + ' kcal');
 }
 COACH_KEEP.push('fadd', 'fdel', 'fcalc', 'fedit', 'fsave');
