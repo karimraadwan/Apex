@@ -244,13 +244,15 @@ function wizBody() {
   let h = stepper(W.step);
   if (W.step === 1) {
     const docs = d.docs.slice().reverse();
-    h += '<p class="mut small">Pick the documents to build from and tell me what each one is, for example your calisthenics program and your legs program. I read every page.</p>' +
-      '<label class="upbtn" for="wizfile">' + ICON(I.plus) + (S.uploading ? 'Uploading ' + esc(S.uploading) + '…' : 'Upload a document') + '</label><input type="file" id="wizfile" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.md,image/*" multiple hidden>' +
-      '<p class="mut small" style="margin-top:8px">Best as PDF. Word and Excel: save as PDF first so I can read them.</p>';
+    const ul = W.upLabel || 'Calisthenics';
+    h += '<p class="mut small">Pick the documents to build from and tell me what each one is. I read every page.</p>' +
+      '<p class="lbl">Next upload is for</p><div class="chiprow uplbl" role="group" aria-label="What the next upload is for">' + DOC_LABELS.map((l) => '<button class="chip' + (l === ul ? ' on' : '') + '" aria-pressed="' + (l === ul) + '" data-act="wuplbl" data-l="' + l + '">' + l + '</button>').join('') + '</div>' +
+      '<label class="upbtn" for="wizfile">' + ICON(I.plus) + (S.uploading ? 'Uploading ' + esc(S.uploading) + '…' : 'Upload ' + esc(ul) + ' document') + '</label><input type="file" id="wizfile" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.md,image/*" multiple hidden>' +
+      '<p class="mut small" style="margin-top:8px">Pick the type, upload, then pick the next type and upload again. Best as PDF; save Word and Excel as PDF first.</p>';
     if (!docs.length) h += '<p class="empty-note">No documents yet. You can also skip this and just describe what you want in step 2.</p>';
     h += docs.map((x, i) => {
       const s = W.docs[x.url] || { on: false, label: x.label || 'Other', note: '' };
-      return '<div class="wdoc' + (s.on ? ' on' : '') + '"><button class="wdoc-h" data-act="wdoc" data-u="' + esc(x.url) + '" aria-pressed="' + !!s.on + '"><span class="chk" aria-hidden="true">' + (s.on ? '✓' : '') + '</span><span class="li-main"><b>' + esc(x.name) + '</b><span class="mut small">' + esc(ago(x.date)) + ' · ' + fmtSize(x.size) + '</span></span></button>' +
+      return '<div class="wdoc' + (s.on ? ' on' : '') + '"><button class="wdoc-h" data-act="wdoc" data-u="' + esc(x.url) + '" aria-pressed="' + !!s.on + '"><span class="chk" aria-hidden="true">' + (s.on ? '✓' : '') + '</span><span class="li-main"><b>' + esc(x.name) + '</b><span class="mut small">' + (s.on ? esc(s.label) + ' · ' : '') + esc(ago(x.date)) + ' · ' + fmtSize(x.size) + '</span></span></button><button class="icon-btn x wdoc-x" data-act="docdel" data-u="' + esc(x.url) + '" data-n="' + esc(x.name) + '" aria-label="Delete ' + esc(x.name) + '">✕</button>' +
         (s.on ? '<div class="wdoc-b"><label class="mut small" for="wl' + i + '">This document is for</label><select id="wl' + i + '" data-wl="' + esc(x.url) + '">' + DOC_LABELS.map((l) => '<option' + (l === s.label ? ' selected' : '') + '>' + l + '</option>').join('') + '</select>' +
           '<label class="mut small" for="wn' + i + '">Anything I should know about it? (optional)</label><input id="wn' + i + '" data-wn="' + esc(x.url) + '" maxlength="200" value="' + esc(s.note) + '" placeholder="e.g. I like the skill work, drop the finisher"></div>' : '') + '</div>';
     }).join('');
@@ -291,7 +293,7 @@ function wizField(el) {
 document.addEventListener('input', (ev) => { if (ev.target.closest && ev.target.closest('.modal.info[data-id="wiz"]')) wizField(ev.target); });
 document.addEventListener('change', (ev) => {
   if (ev.target.closest && ev.target.closest('.modal.info[data-id="wiz"]')) wizField(ev.target);
-  if (ev.target.id === 'wizfile' && ev.target.files.length) uploadFiles([...ev.target.files], 'Other');
+  if (ev.target.id === 'wizfile' && ev.target.files.length) uploadFiles([...ev.target.files], (S.wiz && S.wiz.upLabel) || 'Calisthenics');
 });
 async function wizGen() {
   const W = S.wiz, P = W.prefs, d = D();
@@ -377,7 +379,7 @@ function progBody() {
 }
 
 /* ---------- actions (called from the main click handler in app.js) ---------- */
-const COACH_KEEP = ['prpre', 'prunit', 'prsave', 'wdoc', 'wgoal', 'wweeks', 'wuse', 'wnext', 'wback', 'wgen', 'recdec', 'recall', 'progweek', 'progbuild', 'progact', 'progdisc', 'progretry', 'prdel'];
+const COACH_KEEP = ['wuplbl', 'docdel', 'prpre', 'prunit', 'prsave', 'wdoc', 'wgoal', 'wweeks', 'wuse', 'wnext', 'wback', 'wgen', 'recdec', 'recall', 'progweek', 'progbuild', 'progact', 'progdisc', 'progretry', 'prdel'];
 const COACH_ACTS = {
   coachnow: () => coachNow(),
   mvacc: (el) => { LS.setItem('missdis-' + el.dataset.f, '1'); moveAccept(el.dataset.f, el.dataset.t); },
@@ -397,6 +399,13 @@ const COACH_ACTS = {
     send({ action: 'log', table: 'Events', row: Object.assign({}, ev, { goal: v[0] }) }); toast(v[0] ? 'Goal set: ' + v[0] : 'Goal removed');
   },
   wizopen: () => { const dr = progDraft(); if (dr && ['review', 'ready'].indexOf(dr.status) >= 0 && !confirm('You already have a program waiting for you. Start another one?')) { progOpen(dr.id); return; } wizOpen(); },
+  wuplbl: (el) => { S.wiz.upLabel = el.dataset.l; wizRefreshKeep(); },
+  docdel: (el) => {
+    if (!confirm('Delete ' + el.dataset.n + '? It is moved to the trash of your Google Drive.')) return;
+    send({ action: 'doc_del', url: el.dataset.u });
+    if (S.wiz) { delete S.wiz.docs[el.dataset.u]; wizSave(); keepScroll('wiz', wizBody()); }
+    refreshSheet('docs', docsBody()); toast('Deleted');
+  },
   wdoc: (el) => { const u = el.dataset.u, x = D().docs.find((y) => y.url === u), s = S.wiz.docs[u] || { on: false, label: (x && x.label) || 'Other', note: '' }; s.on = !s.on; S.wiz.docs[u] = s; wizRefreshKeep(); },
   wgoal: (el) => { const g = el.dataset.g, G = S.wiz.prefs.goals, i = G.indexOf(g); if (i >= 0) G.splice(i, 1); else G.push(g); wizRefreshKeep(); },
   wweeks: (el) => { S.wiz.prefs.weeks = Number(el.dataset.n); wizRefreshKeep(); },

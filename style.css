@@ -679,3 +679,8 @@ select{-webkit-appearance:none;appearance:none;padding-right:36px;background-ima
 .kin{width:84px;min-height:44px;padding:6px 10px;text-align:right;background:var(--card)}
 .fest .li-end{display:flex;align-items:center;gap:6px}
 .ftot b{font-size:1rem}
+.wdoc{position:relative}
+.wdoc-h{padding-right:60px}
+.wdoc-x{position:absolute;top:10px;right:8px;width:44px;min-width:44px;min-height:44px;background:none;color:var(--tx2);font-size:1rem}
+.li-link{flex:1;min-width:0;display:flex;align-items:center;gap:14px;color:var(--tx);min-height:44px}
+.uplbl{margin-top:0}

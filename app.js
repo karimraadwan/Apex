@@ -72,14 +72,16 @@ function save() { LS.setItem('data', JSON.stringify(S.data)); LS.setItem('queue'
 let flushing = false;
 async function flush() {
   if (flushing) return; flushing = true;
+  let rejected = false;
   while (S.queue.length) {
     try { await call(S.queue[0]); S.queue.shift(); save(); }
     catch (e) {
-      if (e instanceof Reject) { S.failed.push({ item: S.queue.shift(), error: e.message }); save(); toast('Not saved: ' + e.message, 3500); continue; }
+      if (e instanceof Reject) { rejected = true; S.failed.push({ item: S.queue.shift(), error: e.message }); save(); toast('Not saved: ' + e.message, 4500); continue; }
       break; // offline or server busy: keep everything and retry later
     }
   }
   flushing = false;
+  if (rejected && !S.queue.length) setTimeout(() => load(), 1500); // show what the sheet really has
 }
 
 // local mirror of a queued write (used right away and again after every reload)
@@ -92,6 +94,8 @@ function applyLocal(item) {
     const i = L.findIndex((r) => keys.every((k) => String(r[k]) === String(item.row[k])));
     if (item.action === 'del') { if (i >= 0) L.splice(i, 1); return; }
     if (i >= 0) L[i] = Object.assign({}, L[i], item.row); else L.push(Object.assign({}, item.row));
+  } else if (item.action === 'doc_del') {
+    d.docs = d.docs.filter((x) => x.url !== item.url);
   } else if (item.action === 'config') {
     d.cfg[item.key] = String(item.value);
   } else if (item.action === 'suggest_decide') {
@@ -464,7 +468,7 @@ function docsBody() {
   return '<p class="mut small">Upload your program PDFs, nutrition plans, photos of notes, anything I should use. They are saved privately in your Google Drive (folder "Apex plan documents"), and I read them when I build your next plan.</p>' +
     '<label class="upbtn" for="docfile">' + ICON(I.plus) + (S.uploading ? 'Uploading ' + esc(S.uploading) + '…' : 'Upload a document') + '</label><input type="file" id="docfile" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.md,image/*" multiple hidden>' +
     '<p class="mut small" style="margin-top:8px">PDF, Word, Excel, text or photos · up to 20 MB each</p>' +
-    (docs.length ? '<div class="card list flat">' + docs.map((x) => '<a class="li" href="' + esc(x.url) + '" target="_blank" rel="noopener"><span class="li-ic" style="background:#ef4444">' + ICON('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>') + '</span><span class="li-main"><b>' + esc(x.name) + '</b><span class="mut small">' + esc(ago(x.date)) + ' · ' + fmtSize(x.size) + '</span></span><span class="li-end"><span class="chev">›</span></span></a>').join('') + '</div>' : '<p class="empty-note">No documents yet.</p>');
+    (docs.length ? '<div class="card list flat">' + docs.map((x) => '<div class="li"><a class="li-link" href="' + esc(x.url) + '" target="_blank" rel="noopener"><span class="li-ic" style="background:#ef4444">' + ICON('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>') + '</span><span class="li-main"><b>' + esc(x.name) + '</b><span class="mut small">' + esc(x.label && x.label !== 'Other' ? x.label + ' · ' : '') + esc(ago(x.date)) + ' · ' + fmtSize(x.size) + '</span></span></a><button class="icon-btn x" data-act="docdel" data-u="' + esc(x.url) + '" data-n="' + esc(x.name) + '" aria-label="Delete ' + esc(x.name) + '">✕</button></div>').join('') + '</div>' : '<p class="empty-note">No documents yet.</p>');
 }
 function inspBody() {
   const d = d0(), cats = [...new Set(d.library.map((l) => l.tab).concat(d.interests.map((i) => i.name)))];
