@@ -28,7 +28,7 @@ function dow(ds) { return DAYS[new Date(ds + 'T12:00:00Z').getUTCDay()]; }
 function weekNo(ds) {
   const start = (S.data && S.data.cfg.program_start) || ds;
   const diff = daysBetween(start, ds);
-  return diff < 0 ? 1 : (Math.floor(diff / 7) % 4) + 1;
+  return diff < 0 ? 1 : (Math.floor(diff / 7) % planWeeks()) + 1;
 }
 // Accepts "2026-11-16 07:02", "2026-11-16" or a full ISO/Date string; returns null when unreadable.
 function parseStamp(x) {
@@ -86,8 +86,8 @@ async function flush() {
 function applyLocal(item) {
   const d = S.data; if (!d) return;
   if (item.action === 'log' || item.action === 'del') {
-    const keys = { MealLog: ['date', 'slot'], WaterLog: ['date'], WorkoutLog: ['date', 'session'], Checkin: ['date'], Body: ['date'], Events: ['name', 'date'], Library: ['url'], Interests: ['name'] }[item.table];
-    const L = item.table === 'Events' ? d.events : item.table === 'Library' ? d.library : item.table === 'Interests' ? d.interests : d.logs[item.table];
+    const keys = { MealLog: ['date', 'slot'], WaterLog: ['date'], WorkoutLog: ['date', 'session'], Checkin: ['date'], Body: ['date'], Events: ['name', 'date'], Library: ['url'], Interests: ['name'], Overrides: ['date'], PRs: ['date', 'name'] }[item.table];
+    const L = { Events: d.events, Library: d.library, Interests: d.interests, Overrides: d.overrides, PRs: d.prs }[item.table] || d.logs[item.table];
     if (!L || !keys) return;
     const i = L.findIndex((r) => keys.every((k) => String(r[k]) === String(item.row[k])));
     if (item.action === 'del') { if (i >= 0) L.splice(i, 1); return; }
@@ -124,6 +124,7 @@ function normalize(d) {
   d.whoop.sort(byDate); d.strava.sort(byDate); // B1: never trust row order
   Object.values(d.logs).forEach((l) => l.sort(byDate));
   d.verdicts = d.verdicts || []; d.docs = d.docs || []; d.interests = d.interests || []; d.library = d.library || [];
+  d.feedback = d.feedback || []; d.prs = d.prs || []; d.programs = d.programs || []; d.overrides = d.overrides || []; d.ai = !!d.ai;
   return d;
 }
 
@@ -138,7 +139,9 @@ function verdictChoice(ds) { const v = D().verdicts.find((x) => x.id === 'verdic
 
 // B6 / B7: what you actually train after accepting a verdict
 function sessionFor(ds) {
-  const p = planFor(ds); if (!p) return null;
+  // a session you moved here (missed-workout fix) replaces the planned one
+  const ov = D().overrides.find((o) => o.date === ds);
+  const p = ov ? Object.assign({ week: String(weekNo(ds)), day: dow(ds), moved: true }, ov) : planFor(ds); if (!p) return null;
   const w = whoopFor(ds), ch = verdictChoice(ds);
   if (ch !== 'accepted' || !w) return { p, name: p.session, details: p.details, mode: 'plan' };
   if (w.verdict === 'swap') {
@@ -330,8 +333,9 @@ function viewToday() {
   let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
     '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
   h += syncBanner() + tzBanner();
-  h += heroCard(ds, w, ch, ses);
-  if (!p) return h;
+  h += heroCard(ds, w, ch, ses) + missedCard();
+  const extras = () => weeklyCard(true) + prCelebrate() + coachCard() + raceCard();
+  if (!p) return h + extras();
 
   const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), tg = targetFor(p.daytype);
   const eaten = kcalEaten(ms, ml), kT = Number(tg.kcal) || 0, W = waterInfo(ds);
@@ -339,6 +343,7 @@ function viewToday() {
     miniRing('meals', 'Fuel', eaten, kT, 'kcal', 'url(#gk)', eaten + ' / ' + kT) +
     miniRing('water', 'Water', W.ml, W.tgt, wUnit(), 'url(#gw)', wNum(W.ml).toFixed(wDec()) + ' / ' + wFmt(W.tgt)) +
     miniRing('insights', 'Sleep', w ? Number(w.sleep_perf) || 0 : 0, 100, '%', 'url(#gt)', w && w.sleep_hours ? esc(w.sleep_hours) + ' h' : 'No data') + '</div>';
+  h += extras();
 
   // up next
   const next = ms.find((m) => !ml.find((r) => r.slot === m.slot));
@@ -549,7 +554,7 @@ const LIB_COL = { Kettlebell: ['#f97316', '#ef4444'], 'Animal Flow': ['#22c55e',
 function viewTrain() {
   const today = todayStr(), d = d0(), sel = S.viewDay || today;
   const start = dateAdd(today, -new Date(today + 'T12:00:00Z').getUTCDay());
-  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of 4</p><h1>Train</h1></div></header><div class="wk" role="group" aria-label="This week">';
+  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + '<div class="wk" role="group" aria-label="This week">';
   for (let i = 0; i < 7; i++) {
     const ds = dateAdd(start, i), done = logs('WorkoutLog', ds).some((r) => r.status === 'done');
     h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today' : '') + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + ds + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i] + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd"></i></button>';
@@ -558,7 +563,8 @@ function viewTrain() {
   const ses = sessionFor(sel);
   if (ses) {
     const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
-    h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' + blocksHTML(ses.details, sel) + '</section>';
+    h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' +
+      (ses.p.moved ? '<p class="moved">' + ICON(CI.move) + '<span>Moved here ' + esc(String(ses.p.reason || '').replace(/(\d{4}-\d{2}-\d{2})/, (m) => niceDate(m))) + '</span><button class="txt fit" data-act="mvundo" data-d="' + esc(sel) + '" data-r="' + esc(ses.p.reason) + '">Undo</button></p>' : '') + blocksHTML(ses.details, sel) + '</section>';
   }
   const tabs = [...new Set(d.library.map((l) => l.tab))];
   if (tabs.length) {
@@ -605,6 +611,7 @@ function viewInsights() {
       return '<div class="col' + (c.ds === today ? ' now' : '') + '"><span class="v">' + (c.w ? (M[2] ? v.toFixed(1) : Math.round(v)) : '') + '</span><i style="height:' + (c.w ? Math.max(3, Math.round((v / max) * 96)) : 0) + 'px;background:' + col + '"></i><span class="d">' + Number(c.ds.slice(8)) + '</span></div>';
     }).join('') + '</div><p class="mut small">' + (mk === 'recovery' ? 'Green 67%+ · yellow 34–66% · red 33% and under. ' : '') + 'Empty column = no data that day.' + (age > 0 ? ' <b class="warnt">Latest data is ' + age + ' day' + (age > 1 ? 's' : '') + ' old.</b>' : '') + '</p></section>';
   }
+  h += weeklyCard(false) + prsSection();
   h += '<h2>Suggested changes</h2>';
   if (!d.suggestions.length) h += '<div class="card empty-s"><p class="mut">Nothing waiting. Any change to your plan shows up here first, and nothing changes until you accept it.</p></div>';
   d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
@@ -647,7 +654,7 @@ function viewMore() {
     row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Water unit', end: esc({ L: 'Liters', ml: 'Milliliters', oz: 'Ounces' }[wUnit()]) }) +
     row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Bottle size', end: esc(wFmt(Number(c.bottle_ml) || 750, null, wUnit() === 'L' ? 2 : 0)) }) +
     row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Water target', s: 'Training day / rest day', end: esc(wFmt(Number(c.water_target_train) || 4500) + ' / ' + wFmt(Number(c.water_target_rest) || 3500)) }) +
-    row({ act: 'setstart', ic: I.train, bg: '#6d5ce8', t: 'Program start', s: 'Today is week ' + weekNo(todayStr()) + ' of 4', end: esc(c.program_start ? niceDate(c.program_start) : 'Not set') }) +
+    row({ act: 'setstart', ic: I.train, bg: '#6d5ce8', t: 'Program start', s: 'Today is week ' + weekNo(todayStr()) + ' of ' + planWeeks(), end: esc(c.program_start ? niceDate(c.program_start) : 'Not set') }) +
     row({ act: 'settz', ic: I.gear, bg: '#64748b', t: 'Time zone', end: esc(tz().replace(/_/g, ' ')) }) + '</div><p class="foot">Tap a setting to change it. Changes save to your Google Sheet.</p>';
   h += '<div class="card list" style="margin-top:24px">' + row({ act: 'logout', ic: I.out, bg: 'var(--bad)', t: 'Disconnect this phone', cls: 'danger' }) + '</div>';
   return h;
@@ -693,7 +700,7 @@ document.addEventListener('click', async (ev) => {
   const a = el.dataset.act;
   // B14: ignore a second tap that lands within 0.8 s on a logging button
   if (LOG_ACTS.includes(a)) { const t = Date.now(); if (t - S.lastTap < 800) return; S.lastTap = t; }
-  const KEEP = ['extick', 'icpick', 'inspsave', 'inspdel', 'intadd', 'intaddc', 'intdel', 'setunit', 'setbot', 'savewater', 'savetz', 'savetzsel'];
+  const KEEP = ['extick', 'icpick', 'inspsave', 'inspdel', 'intadd', 'intaddc', 'intdel', 'setunit', 'setbot', 'savewater', 'savetz', 'savetzsel'].concat(COACH_KEEP);
   if (el.closest('.modal.info') && !el.closest('[data-close]') && KEEP.indexOf(a) < 0) closeSheets();
   const ds = todayStr(), ses = S.data && sessionFor(ds);
   const timeVal = () => { const i = $('#mt'); return (i && /^\d{2}:\d{2}$/.test(i.value) && i.value) || nowTime(); };
@@ -818,13 +825,17 @@ document.addEventListener('click', async (ev) => {
     case 'metric': S.metric = el.dataset.m; render(); break;
     case 'evsheet': {
       const n = el.dataset.n, dt = el.dataset.d, left = dt ? daysBetween(ds, dt) : null;
-      infoSheet(n, '<div class="evbig">' + (left === null ? '<b>—</b><span>date not set</span>' : left >= 0 ? '<b>' + left + '</b><span>days to go</span>' : '<b>✓</b><span>passed</span>') + '</div><p class="mut center">' + (dt ? esc(niceDate(dt)) : 'Add the date in the Events tab of your sheet.') + '</p><button class="r" style="width:100%;margin-top:24px" data-act="evdel" data-n="' + esc(n) + '" data-d="' + esc(dt) + '">Delete event</button>');
+      const ev = S.data.events.find((e) => e.name === n && e.date === dt) || {};
+      infoSheet(n, '<div class="evbig">' + (left === null ? '<b>—</b><span>date not set</span>' : left >= 0 ? '<b>' + left + '</b><span>days to go</span>' : '<b>✓</b><span>passed</span>') + '</div><p class="mut center">' + (dt ? esc(niceDate(dt)) : 'Add the date in the Events tab of your sheet.') + (left !== null && left >= 0 && left <= 180 ? ' · ' + racePhase(left) + ' phase' : '') + '</p>' +
+        (dt ? '<div class="card list flat"><button class="li" data-act="evgoal" data-n="' + esc(n) + '" data-d="' + esc(dt) + '"><span class="li-main"><b>Goal time</b><span class="mut small">' + (ev.goal ? 'Used for your race pace' : 'Set one to get your goal pace') + '</span></span><span class="li-end">' + esc(ev.goal || 'Not set') + '<span class="chev">›</span></span></button></div>' : '') +
+        '<button class="r" style="width:100%;margin-top:24px" data-act="evdel" data-n="' + esc(n) + '" data-d="' + esc(dt) + '">Delete event</button>');
       break;
     }
     case 'vday': S.viewDay = el.dataset.d; render(); break;
     case 'ltab': S.libTab = el.dataset.t; render(); break;
     case 'sacc': case 'srej': send({ action: 'suggest_decide', id: el.dataset.id, status: a === 'sacc' ? 'accepted' : 'rejected' }); break;
     case 'clearfail': S.failed = []; save(); render(); break;
+    default: if (COACH_ACTS[a]) await COACH_ACTS[a](el); break;
     case 'cw': case 'cs': {
       // open the window inside the tap so iPhone does not block it, then point it at the link
       const win = window.open('', '_blank');
@@ -834,16 +845,17 @@ document.addEventListener('click', async (ev) => {
     }
   }
 });
-async function uploadFiles(files) {
+async function uploadFiles(files, label) {
   for (const f of files) {
     if (f.size > 20 * 1024 * 1024) { toast(f.name + ' is over 20 MB', 3500); continue; }
-    S.uploading = f.name; refreshSheet('docs', docsBody());
+    S.uploading = f.name; refreshSheet('docs', docsBody()); if (S.wiz) refreshSheet('wiz', wizBody());
     try {
       const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = rej; r.readAsDataURL(f); });
-      const j = await call({ action: 'upload', name: f.name, mime: f.type || 'application/octet-stream', data });
+      const j = await call({ action: 'upload', name: f.name, mime: f.type || 'application/octet-stream', data, label: label || 'Other' });
       S.data.docs.push(j.doc); save(); toast('Uploaded ' + f.name);
+      if (S.wiz && label) { S.wiz.docs[j.doc.url] = { on: true, label: j.doc.label || label, note: '' }; wizSave(); }
     } catch (e) { toast(e.message === 'offline' ? 'You are offline. Try again when connected.' : 'Upload failed: ' + e.message, 4000); }
-    S.uploading = null; refreshSheet('docs', docsBody());
+    S.uploading = null; refreshSheet('docs', docsBody()); if (S.wiz) refreshSheet('wiz', wizBody());
   }
   render();
 }
