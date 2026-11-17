@@ -53,7 +53,11 @@ function updatedLabel() {
   return '<p class="upd"><i></i>Updated ' + esc(a.replace('today ', '')) + '</p>';
 }
 let toastT;
-const toast = (m, ms) => { const t = $('#toast'); t.textContent = m; t.className = 'on'; clearTimeout(toastT); toastT = setTimeout(() => (t.className = ''), ms || 2200); };
+const toast = (m, ms) => {
+  const t = $('#toast'), U = S.undo, can = U && !U.used && Date.now() - U.at < 1500;
+  t.textContent = m; if (can) { U.shown = true; t.insertAdjacentHTML('beforeend', '<button class="undo" data-undo="1">Undo</button>'); ms = Math.max(ms || 0, 5000); }
+  t.className = 'on'; clearTimeout(toastT); toastT = setTimeout(() => (t.className = ''), ms || 2200);
+};
 
 /* ---------- API (POST only) ---------- */
 class Reject extends Error {}
@@ -88,8 +92,7 @@ async function flush() {
 function applyLocal(item) {
   const d = S.data; if (!d) return;
   if (item.action === 'log' || item.action === 'del') {
-    const keys = { MealLog: ['date', 'slot'], WaterLog: ['date'], WorkoutLog: ['date', 'session'], Checkin: ['date'], Body: ['date'], Events: ['name', 'date'], Library: ['url'], Interests: ['name'], Overrides: ['date'], PRs: ['date', 'name'], Sets: ['date', 'exercise', 'set'], Supps: ['date', 'name'], SportLog: ['id'], Hyrox: ['date', 'station'], Injuries: ['area'], Habits: ['date', 'kind', 'time'], Goals: ['id'] }[item.table];
-    const L = { Events: d.events, Library: d.library, Interests: d.interests, Overrides: d.overrides, PRs: d.prs, Sets: d.sets, Supps: d.supps, SportLog: d.sport, Hyrox: d.hyrox, Injuries: d.injuries, Habits: d.habits, Goals: d.goals }[item.table] || d.logs[item.table];
+    const keys = UKEYS[item.table], L = ulist(item.table);
     if (!L || !keys) return;
     const i = L.findIndex((r) => keys.every((k) => String(r[k]) === String(item.row[k])));
     if (item.action === 'del') { if (i >= 0) L.splice(i, 1); return; }
@@ -106,7 +109,7 @@ function applyLocal(item) {
     }
   }
 }
-function send(item) { applyLocal(item); S.queue.push(item); save(); render(); flush(); }
+function send(item) { undoTrack(item); applyLocal(item); S.queue.push(item); save(); render(); flush(); }
 
 async function load(sync) {
   if (!S.url || !S.token) return;
@@ -129,7 +132,7 @@ function normalize(d) {
   Object.values(d.logs).forEach((l) => l.sort(byDate));
   d.verdicts = d.verdicts || []; d.docs = d.docs || []; d.interests = d.interests || []; d.library = d.library || [];
   d.feedback = d.feedback || []; d.prs = d.prs || []; d.programs = d.programs || []; d.overrides = d.overrides || []; d.ai = !!d.ai;
-  ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {};
+  ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek', 'skills', 'shoes', 'mobility'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {};
   return d;
 }
 
@@ -137,7 +140,7 @@ function normalize(d) {
 const D = () => S.data;
 const logs = (t, date) => D().logs[t].filter((r) => r.date === date);
 function planFor(ds, day) { return D().plan.find((p) => String(p.week) === String(weekNo(ds)) && p.day === (day || dow(ds))); }
-function mealsFor(daytype) { return D().meals.filter((m) => m.daytype === daytype); }
+function mealsFor(daytype) { return fastRemap(D().meals.filter((m) => m.daytype === daytype)); }
 function targetFor(daytype) { return D().targets.find((t) => t.daytype === daytype) || {}; }
 function whoopFor(ds) { return D().whoop.find((w) => w.date === ds); }
 function verdictChoice(ds) { const v = D().verdicts.find((x) => x.id === 'verdict-' + ds); return v && (v.status === 'accepted' || v.status === 'rejected') ? v.status : null; }
@@ -339,8 +342,8 @@ function viewToday() {
   let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
     '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
   h += syncBanner() + tzBanner();
-  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + missedCard();
-  const extras = () => weeklyCard(true) + monthlyCard(true) + prCelebrate() + sleepCard() + coachCard() + raceCard() + raceDayLink();
+  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + missedCard() + easeCard() + tipCard();
+  const extras = () => foodCheckCard(true) + cutCard() + weeklyCard(true) + monthlyCard(true) + prCelebrate() + sleepCard() + coachCard() + raceCard() + raceDayLink();
   if (!p) return h + extras();
 
   const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), tg = targetFor(p.daytype);
@@ -354,7 +357,7 @@ function viewToday() {
 
   // up next
   const next = ms.find((m) => !ml.find((r) => r.slot === m.slot));
-  h += travelMealsCard() + '<div class="row sp h2row"><h2 id="sec-meals">Meals</h2><button class="txt fit" data-act="eatout">Eating out?</button></div>';
+  h += travelMealsCard() + fastCard() + proteinFixCard() + '<div class="row sp h2row"><h2 id="sec-meals">Meals</h2><button class="txt fit" data-act="eatout">Eating out?</button></div>';
   if (next) {
     h += '<section class="card upnext' + (S.flash === 'meal' ? ' pop' : '') + '"><div class="eyebrow2"><span>UP NEXT</span><span>' + esc(next.time) + '</span></div><h3>' + esc(next.name) + '</h3><p class="mut">' + esc(next.items) + '</p>' +
       (next.supps ? '<p class="supps">Supplements · ' + esc(next.supps) + '</p>' : '') +
@@ -529,7 +532,7 @@ function viewMeals() {
   if (p) {
     const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), t = targetFor(p.daytype), eaten = kcalEaten(ms, ml), kT = Number(t.kcal) || 1;
     h += '<section class="card macro"><div class="macro-ring">' + ringSVG(eaten / kT, 124, 12, 'url(#gk)') + '<div class="hero-num sm"><b>' + cnt(eaten) + '</b><span>of ' + esc(t.kcal) + '</span></div></div><div class="macros">' +
-      [['Protein', proteinEaten(ms, ml) + ' / ' + proteinTarget(t), 'var(--ringA)'], ['Carbs', t.carbs, 'var(--ringC)'], ['Fat', t.fat, '#f59e0b']].map(([n, g, col]) => '<div class="mac"><span class="mut small">' + n + '</span><b>' + esc(g) + ' g</b><i style="background:' + col + '"></i></div>').join('') + '</div></section>' +
+      [['Protein', proteinEaten(ms, ml) + ' / ' + proteinTarget(t), 'var(--ringA)', Math.min(100, (proteinEaten(ms, ml) / proteinTarget(t)) * 100)], ['Carbs target', t.carbs, 'var(--ringC)', 100], ['Fat target', t.fat, '#f59e0b', 100]].map(([n, g, col, pc]) => '<div class="mac"><span class="mut small">' + n + '</span><b>' + esc(g) + ' g</b><i style="background:linear-gradient(90deg,' + col + ' ' + pc + '%,var(--card2) ' + pc + '%)"></i></div>').join('') + '</div></section>' +
       '<button class="card eoc" data-act="eatout"><span class="li-ic" style="background:#f97316">' + ICON(LI.fork) + '</span><span><b>Eating out today?</b><span class="mut small">Best choices on the menu and how to fit your day</span></span><span class="chev">›</span></button>';
     h += '<p class="sub center">' + esc(p.daytype.charAt(0).toUpperCase() + p.daytype.slice(1)) + ' day · ' + esc(p.session) + '</p>';
     const nxt = ms.find((m) => !ml.find((x) => x.slot === m.slot));
@@ -564,7 +567,7 @@ const LIB_COL = { Kettlebell: ['#f97316', '#ef4444'], 'Animal Flow': ['#22c55e',
 function viewTrain() {
   const today = todayStr(), d = d0(), sel = S.viewDay || today;
   const start = dateAdd(today, -new Date(today + 'T12:00:00Z').getUTCDay());
-  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + '<div class="wk" role="group" aria-label="This week">';
+  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + deloadCard() + '<div class="wk" role="group" aria-label="This week">';
   for (let i = 0; i < 7; i++) {
     const ds = dateAdd(start, i), done = logs('WorkoutLog', ds).some((r) => r.status === 'done');
     h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today' : '') + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + ds + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i] + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd"></i></button>';
@@ -575,10 +578,10 @@ function viewTrain() {
     const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
     h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' +
       (ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '</span></p>' : '') +
-      '<div class="row tr-act"><button class="sm" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="sm" data-act="itopen" data-m="emom">Timer</button></div>' +
+      '<div class="sesstools" role="group" aria-label="Session tools"><button class="chip" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="chip" data-act="itopen" data-m="emom">Timer</button><button class="chip" data-act="adjopen" data-m="short" data-d="' + sel + '">Short on time</button><button class="chip" data-act="adjopen" data-m="ss" data-d="' + sel + '">Superset</button></div>' +
       (ses.p.moved ? '<p class="moved">' + ICON(CI.move) + '<span>Moved here ' + esc(String(ses.p.reason || '').replace(/(\d{4}-\d{2}-\d{2})/, (m) => niceDate(m))) + '</span><button class="txt fit" data-act="mvundo" data-d="' + esc(sel) + '" data-r="' + esc(ses.p.reason) + '">Undo</button></p>' : '') + blocksHTML(ses.details, sel) + '</section>';
   }
-  h += toolsCard() + loadCard();
+  h += toolsCard() + loadCard() + skillsCard() + shoesCard();
   const tabs = [...new Set(d.library.map((l) => l.tab))];
   if (tabs.length) {
     const lt = S.libTab || tabs[0];
@@ -607,8 +610,17 @@ function viewTrain() {
 /* ---------- Insights ---------- */
 const METRICS = { recovery: ['Recovery', '%', 0], hrv: ['HRV', 'ms', 0], sleep_hours: ['Sleep', 'h', 1], rhr: ['Resting HR', 'bpm', 0] };
 function viewInsights() {
-  const d = d0(), today = todayStr(), mk = S.metric || 'recovery', M = METRICS[mk];
-  let h = '<header class="top"><div><p class="date">Last 14 days</p><h1>Insights</h1></div></header>' + streakCard();
+  const d = d0(), today = todayStr(), mk = S.metric || 'recovery', M = METRICS[mk], tab = S.insTab || 'recovery';
+  let h = '<header class="top"><div><p class="date">Your trends</p><h1>Insights</h1></div></header>';
+  // decisions waiting for you always come first
+  if (d.suggestions.length) {
+  h += '<h2>Waiting for you</h2>';
+  d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
+  }
+  const T = [['recovery', 'Recovery'], ['training', 'Training'], ['body', 'Body'], ['wins', 'Wins']];
+  h += '<div class="instab" role="tablist" aria-label="Insights sections">' + T.map(([k, l]) => '<button role="tab" aria-selected="' + (k === tab) + '" class="' + (k === tab ? 'on' : '') + '" data-act="instab" data-t="' + k + '">' + l + '</button>').join('') + '</div>';
+  if (tab === 'recovery') {
+    h += '<h2>WHOOP · last 14 days</h2>';
   h += '<div class="segc" role="tablist">' + Object.keys(METRICS).map((k) => '<button role="tab" aria-selected="' + (k === mk) + '" class="' + (k === mk ? 'on' : '') + '" data-act="metric" data-m="' + k + '">' + METRICS[k][0] + '</button>').join('') + '</div>';
   if (!d.whoop.length) h += '<div class="card mut">No WHOOP data yet. Connect WHOOP in More.</div>';
   else {
@@ -626,10 +638,11 @@ function viewInsights() {
       return '<div class="col' + (c.ds === today ? ' now' : '') + '"><span class="v">' + (c.w ? (M[2] ? v.toFixed(1) : Math.round(v)) : '') + '</span><i style="height:' + (c.w ? Math.max(3, Math.round((v / max) * 96)) : 0) + 'px;background:' + col + '"></i><span class="d">' + Number(c.ds.slice(8)) + '</span></div>';
     }).join('') + '</div><p class="mut small">' + (mk === 'recovery' ? 'Green 67%+ · yellow 34–66% · red 33% and under. ' : '') + 'Empty column = no data that day.' + (age > 0 ? ' <b class="warnt">Latest data is ' + age + ' day' + (age > 1 ? 's' : '') + ' old.</b>' : '') + '</p></section>';
   }
-  h += weeklyCard(false) + monthlyCard(false) + goalsSection() + prsSection() + testsCard() + affectCard();
-  h += '<h2>Suggested changes</h2>';
-  if (!d.suggestions.length) h += '<div class="card empty-s"><p class="mut">Nothing waiting. Any change to your plan shows up here first, and nothing changes until you accept it.</p></div>';
-  d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
+    h += whatWorksCard() + affectCard() + weeklyCard(false) + monthlyCard(false);
+  } else if (tab === 'training') {
+    h += volumeCard() + prsSection() + testsCard() + mobCard() + goalsSection();
+  } else if (tab === 'body') {
+    h += cutCard();
   const b = d.logs.Body.slice(-8).reverse();
   h += '<h2>Weight</h2>' + bodyTrend();
   if (!b.length) h += '<div class="card mut">No entries yet. Log your weight in More.</div>';
@@ -637,7 +650,10 @@ function viewInsights() {
     const prev = b[i + 1], dlt = prev ? Number(x.weight) - Number(prev.weight) : 0;
     return '<div class="li"><span class="li-main"><b>' + esc(x.weight) + ' kg</b><span class="mut small">' + esc(niceDate(x.date)) + (x.waist ? ' · waist ' + esc(x.waist) + ' cm' : '') + '</span></span><span class="li-end ' + (dlt < 0 ? 'okt' : dlt > 0 ? 'badt' : '') + '">' + (prev ? (dlt > 0 ? '+' : '') + dlt.toFixed(1) : '') + '</span></div>';
   }).join('') + '</div>';
-  h += photosSection();
+    h += foodCheckCard(false) + photosSection();
+  } else {
+    h += '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
+  }
   if (S.failed.length) h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small" style="padding:6px 0">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:12px" data-act="clearfail">Clear</button></div>';
   return h;
 }
@@ -652,12 +668,14 @@ function viewMore() {
   const st = (on) => '<span class="pill ' + (on ? 'keep' : 'swap') + '">' + (on ? 'Connected' : 'Connect') + '</span>';
   let h = '<header class="top"><div><p class="date">Apex</p><h1>More</h1></div></header>' + syncBanner();
   const ints = d.interests.map((i) => i.name);
-  h += '<h2>Your plan inputs</h2><div class="card plan-in"><p class="mut small" style="margin:0 0 4px">Everything here goes into your next month\'s plan.</p></div><div class="card list">' +
+  h += '<h2>Your plan inputs</h2><div class="card plan-in"><p class="mut small" style="margin:0 0 4px">Used when you create a new program on Train.</p></div><div class="card list">' +
     row({ act: 'docsheet', ic: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>', bg: '#ef4444', t: 'Program documents', s: d.docs.length ? d.docs.length + ' uploaded' : 'Upload PDFs, plans, notes', end: d.docs.length ? '<span class="count">' + d.docs.length + '</span>' : '' }) +
     row({ act: 'inspsheet', ic: I.play, bg: '#d6249f', t: 'Reels and TikToks', s: d.library.length + ' saved · add what inspires you', end: '<span class="count">' + d.library.length + '</span>' }) +
     row({ act: 'intsheet', ic: '<path d="m3 20 6-11 4 6 3-4 5 9z"/><circle cx="17" cy="6" r="2"/>', bg: '#14b8a6', t: 'Sports I\'m into', s: ints.length ? esc(ints.slice(0, 3).join(', ')) + (ints.length > 3 ? ' +' + (ints.length - 3) : '') : 'e.g. rock climbing, swimming', end: ints.length ? '<span class="count">' + ints.length + '</span>' : '' }) + '</div>';
   h += '<h2>Coach</h2><div class="card list">' + row({ act: 'chatopen', ic: LI.chat, bg: 'var(--accFill)', t: 'Ask your coach', s: 'Questions about training, food, recovery' }) +
-    row({ act: 'remopen', ic: LI.bell, bg: '#ef4444', t: 'Reminders', s: 'Meals, workout, water, bedtime' }) + row({ act: 'tropen', ic: TI.plane, bg: '#6d5ce8', t: 'Travel mode', s: travel() ? 'On · ' + esc(travel().place) : 'Off' }) + '</div>';
+    row({ act: 'remopen', ic: LI.bell, bg: '#ef4444', t: 'Reminders', s: 'Meals, workout, water, bedtime' }) + row({ act: 'pwopen', ic: CI.cal, bg: '#0ea5e9', t: 'Plan your week', s: 'Move sessions around your calendar' }) +
+    row({ act: 'shareopen', ic: BI.share, bg: '#14b8a6', t: 'Share my week', s: D().cfg.share_token ? 'Link is on' : 'Read-only link for a friend or coach' }) + row({ act: 'fastopen', ic: BI.moonc, bg: '#6d5ce8', t: 'Fasting mode', s: fasting() ? 'On · iftar ' + esc(fasting().iftar) : 'Ramadan or daily fasting' }) +
+    row({ act: 'cutopen', ic: BI.scale, bg: '#f59e0b', t: 'Weight plan', s: cut() ? 'Target ' + cut().target + ' kg' : 'Safe weight loss to a target' }) + row({ act: 'tropen', ic: TI.plane, bg: '#6d5ce8', t: 'Travel mode', s: travel() ? 'On · ' + esc(travel().place) : 'Off' }) + '</div>';
   h += '<h2>Data</h2><div class="card list">' +
     row({ act: 'sync', ic: I.sync, bg: 'var(--accFill)', t: S.busy ? 'Syncing…' : 'Sync now', s: 'Last good sync: ' + esc(ago(c.last_sync_ok)) }) +
     row({ act: 'cw', ic: I.link, bg: '#111', t: 'WHOOP', s: 'Recovery, strain and sleep · read-only', end: st(d.connected.whoop) }) +
@@ -673,6 +691,7 @@ function viewMore() {
     row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Bottle size', end: esc(wFmt(Number(c.bottle_ml) || 750, null, wUnit() === 'L' ? 2 : 0)) }) +
     row({ act: 'setwater', ic: I.drop, bg: '#0ea5e9', t: 'Water target', s: 'Training day / rest day', end: esc(wFmt(Number(c.water_target_train) || 4500) + ' / ' + wFmt(Number(c.water_target_rest) || 3500)) }) +
     row({ act: 'setstart', ic: I.train, bg: '#6d5ce8', t: 'Program start', s: 'Today is week ' + weekNo(todayStr()) + ' of ' + planWeeks(), end: esc(c.program_start ? niceDate(c.program_start) : 'Not set') }) +
+    row({ act: 'setsleep', ic: LI.moon, bg: '#6d5ce8', t: 'Sleep you need', end: esc(c.sleep_need || 8) + ' h' }) + row({ act: 'setprot', ic: LI.fork, bg: '#ef4444', t: 'Protein a day', s: c.protein_target ? '' : 'From your meal plan', end: c.protein_target ? esc(c.protein_target) + ' g' : '' }) +
     row({ act: 'settz', ic: I.gear, bg: '#64748b', t: 'Time zone', end: esc(tz().replace(/_/g, ' ')) }) + '</div><p class="foot">Tap a setting to change it. Changes save to your Google Sheet.</p>';
   h += '<div class="card list" style="margin-top:24px">' + row({ act: 'logout', ic: I.out, bg: 'var(--bad)', t: 'Disconnect this phone', cls: 'danger' }) + '</div>';
   return h;
@@ -738,7 +757,8 @@ document.addEventListener('click', async (ev) => {
       break;
     }
     case 'vundo': send({ action: 'suggest_decide', id: 'verdict-' + ds, status: 'cleared', date: ds, text: 'Verdict choice cleared' }); break;
-    case 'wdone': case 'wskip': send({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: a === 'wdone' ? 'done' : 'skipped', note: ses.mode, time: nowTime() } }); break;
+    case 'wdone': case 'wskip': send({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: a === 'wdone' ? 'done' : 'skipped', note: ses.mode, time: nowTime() } });
+      if (a === 'wdone') { S.rate = { date: ds, session: ses.name }; setTimeout(() => infoSheet('Rate your session', rateBody(), 'rate'), 350); } break;
     case 'wundo': send({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: ses.name } }); break;
     case 'mate': S.flash = 'meal'; autoSupps(el.dataset.slot); send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
     case 'mskip': send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'skipped', time: '', note: '', extra_name: '', kcal: '' } }); break;
@@ -828,7 +848,7 @@ document.addEventListener('click', async (ev) => {
       break;
     }
     case 'ssheet': if (ses) infoSheet(ses.name, '<p class="mut small">' + esc(ses.p.time) + ' · ' + esc(ses.mode === 'swap' ? 'Recovery' : ses.p.load) + '</p>' + blocksHTML(ses.details)); break;
-    case 'jump': if (el.dataset.k === 'insights') { S.tab = 'insights'; S.metric = 'sleep_hours'; render(); window.scrollTo(0, 0); break; } { const t = document.getElementById('sec-' + el.dataset.k); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
+    case 'jump': if (el.dataset.k === 'insights') { S.tab = 'insights'; S.insTab = 'recovery'; S.metric = 'sleep_hours'; render(); window.scrollTo(0, 0); break; } { const t = document.getElementById('sec-' + el.dataset.k); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); break; }
     case 'shopper': S.shopPer = el.dataset.p; render(); break;
     case 'metric': S.metric = el.dataset.m; render(); break;
     case 'evsheet': {

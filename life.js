@@ -93,7 +93,7 @@ function sleepCard() {
   const h = local().hour; if (h < 17) return '';
   const B = bedtime(todayStr()), late = lateCaffeine(todayStr());
   return '<section class="card sleepc"><div class="ms-top"><span class="ms-ic sl">' + ICON(LI.moon) + '</span><div><span class="eyebrow3">Tonight</span><h3>Bed by ' + B.bed + '</h3><p class="mut small">To wake at ' + B.wake + ' with ' + (B.need / 60).toFixed(1).replace('.0', '') + ' h of sleep. Tomorrow: ' + esc(B.tomorrow) + '.' + (B.why.length ? ' Extra for ' + B.why.join(' and ') + '.' : '') + '</p>' +
-    (late ? '<p class="small warnline">☕ Coffee at ' + esc(late) + ' today can cut deep sleep. Keep the room cool and dark.</p>' : '<p class="small" style="margin:6px 0 0">Screens off 30 min before. Magnesium at 21:00.</p>') + '</div></div></section>';
+    forecastLine() + (late ? '<p class="small warnline">☕ Coffee at ' + esc(late) + ' today can cut deep sleep. Keep the room cool and dark.</p>' : '<p class="small" style="margin:6px 0 0">Screens off 30 min before. Magnesium at 21:00.</p>') + '</div></div></section>';
 }
 
 /* ======================= 9. supplements ======================= */
@@ -187,7 +187,7 @@ function affectCard() {
   const rows = [];
   const cmp = (label, test, metric, unit, days) => {
     const yes = [], no = []; days.forEach((ds) => { const w = nextW(ds); if (!w || !Number(w[metric])) return; (test(ds) ? yes : no).push(Number(w[metric])); });
-    if (yes.length >= 3 && no.length >= 3) { const a = avg(yes), b = avg(no), d = a - b; rows.push('<div class="li"><span class="li-main"><b>' + label + '</b><span class="mut small">' + yes.length + ' vs ' + no.length + ' days</span></span><span class="li-end ' + (d < 0 ? 'badt' : 'okt') + '"><b>' + (d > 0 ? '+' : '') + d.toFixed(0) + unit + '</b></span></div>'); }
+    if (yes.length >= 3 && no.length >= 3) { const a = avg(yes), b = avg(no), d = Math.round(a - b); rows.push('<div class="li"><span class="li-main"><b>' + label + '</b><span class="mut small">' + yes.length + ' vs ' + no.length + ' days</span></span><span class="li-end ' + (d < 0 ? 'badt' : d > 0 ? 'okt' : 'mut') + '"><b>' + (d === 0 ? 'no change' : (d > 0 ? '+' : '') + d + unit) + '</b></span></div>'); }
     else rows.push('<div class="li"><span class="li-main"><b>' + label + '</b><span class="mut small">Needs 3+ days of each (' + yes.length + ' / ' + no.length + ' so far)</span></span></div>');
   };
   const days = []; for (let i = 1; i <= 59; i++) days.push(dateAdd(todayStr(), -i));
@@ -196,7 +196,7 @@ function affectCard() {
   cmp('Coffee after 16:00 → sleep score', (ds) => !!lateCaffeine(ds), 'sleep_perf', '%', days.filter((ds) => (D().habits || []).some((h) => h.date === ds) || D().logs.Checkin.some((c) => c.date === ds)));
   cmp('Eating after 21:00 → sleep score', lateMeal, 'sleep_perf', '%', days.filter((ds) => D().logs.MealLog.some((r) => r.date === ds)));
   cmp('Alcohol → next-day HRV', (ds) => (D().habits || []).some((h) => h.date === ds && h.kind === 'alcohol'), 'hrv', ' ms', days.filter((ds) => (D().habits || []).some((h) => h.date === ds) || D().logs.Checkin.some((c) => c.date === ds)));
-  return '<h2>What affects your recovery</h2><div class="card list">' + rows.join('') + '</div><p class="foot">Log stress, mood and coffee on Today. The difference compares your WHOOP numbers on those days with your other days.</p>';
+  return '<h2>Details</h2><div class="card list">' + rows.join('') + '</div><p class="foot">Log stress, mood and coffee on Today. The difference compares your WHOOP numbers on those days with your other days.</p>';
 }
 
 /* ======================= 26. progress photos ======================= */

@@ -11,7 +11,7 @@ const DOC_LABELS = ['Calisthenics', 'Legs', 'Conditioning', 'Kettlebell', 'Runni
 const GOALS = ['Half marathon', 'Strength', 'Calisthenics skills', 'Build muscle', 'Lose fat', 'Conditioning', 'MMA'];
 const FOCI = ['Let Apex decide', 'Calisthenics', 'Calisthenics Push', 'Calisthenics Pull', 'Legs', 'Conditioning', 'Kettlebell', 'Easy run', 'Long run', 'Intervals / tempo', 'Mobility', 'Sport (e.g. climbing)', 'Rest'];
 const RATE = { great: ['Great', 'keep'], solid: ['Solid', 'keep'], easy: ['Easy', 'keep'], tough: ['Tough', 'reduce'], watch: ['Watch', 'swap'] };
-const PR_PRESETS = [['Engine Test', 'time'], ['5K run', 'time'], ['Back squat', 'kg'], ['Weighted pull-up', 'kg'], ['Max burpees 60 s', 'reps'], ['Muscle-ups', 'reps']];
+const PR_PRESETS = [['Engine Test', 'time'], ['5K run', 'time'], ['Back squat', 'kg'], ['Weighted pull-up', 'kg'], ['Max burpees 60 s', 'reps'], ['Muscle-ups', 'reps'], ['Dead hang', 'time'], ['Farmers carry 2 x 24 kg', 'm']];
 const LOADC = (l) => esc(String(l || '').toLowerCase());
 
 /* ---------- small helpers ---------- */

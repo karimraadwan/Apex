@@ -20,7 +20,10 @@ function restSec(rest) {
 function rxTarget(name, rx) {
   // your plans are written reps x sets, e.g. "Hip thrusters 12 x 3" = 12 reps, 3 sets
   const t = String(rx || '') + ' ' + String(name || ''), sr = t.match(/(\d+)(?:\s*-\s*(\d+))?\s*(?:each(?:\s+side|\s+leg|\s+hand)?\s*)?[×x]\s*(\d+)/i), kg = t.match(/(\d+(?:\.\d+)?)\s*kg/i);
-  return { sets: sr ? Math.max(1, Math.min(10, Number(sr[3]))) : 3, reps: sr ? Number(sr[2] || sr[1]) : 8, kg: kg ? Number(kg[1]) : '' };
+  if (sr) return { sets: Math.max(1, Math.min(10, Number(sr[3]))), reps: Number(sr[2] || sr[1]), kg: kg ? Number(kg[1]) : '' };
+  // other ways you write it: "15 Australian pullups x 3", "L-sit 10s x 3", "EMOM x5: ..."
+  const xs = t.match(/[×x]\s*(\d+)(?!.*[×x]\s*\d)/i), first = String(name || '').match(/^\D{0,3}?(\d+)\b(?!\s*kg)/i);
+  return { sets: xs ? Math.max(1, Math.min(10, Number(xs[1]))) : 3, reps: first ? Number(first[1]) : 8, kg: kg ? Number(kg[1]) : '' };
 }
 function setsFor(ex) { const k = nk(ex); return (D().sets || []).filter((s) => nk(s.exercise) === k); }
 function liftSuggest(ex, tgt) {
@@ -35,7 +38,7 @@ function liftSuggest(ex, tgt) {
 function exSheetBody() {
   const X = S.ex, today = todayStr(), done = setsFor(X.name).filter((s) => s.date === today), sug = liftSuggest(X.name, X.tgt);
   const nSets = Math.max(X.tgt.sets, X.extra + X.tgt.sets, done.length);
-  let h = '<p class="mut small">' + esc(X.rx || '') + (X.rest ? ' · rest ' + fmtSec(X.rest) : '') + '</p>';
+  let h = '<p class="mut small">' + esc(X.rx || '') + (X.rest ? ' · rest ' + fmtSec(X.rest) : '') + '</p>' + cuesHTML(X.name);
   if (sug.last) h += '<div class="lastbox"><span class="eyebrow3">Last time · ' + esc(niceDate(sug.last[0].date)) + '</span><b>' + sug.last.map((s) => (Number(s.kg) ? s.kg + ' kg × ' : '') + s.reps).join(' · ') + '</b><span class="mut small">' + esc(sug.why) + '</span></div>';
   else h += '<p class="mut small">' + esc(sug.why) + '</p>';
   h += '<div class="setgrid" role="table" aria-label="Sets"><div class="sg-h" role="row"><span>Set</span><span>kg</span><span>Reps</span><span></span></div>';
@@ -78,6 +81,9 @@ function beep(n) {
   } catch (e) { /* no sound */ }
   try { if (navigator.vibrate) navigator.vibrate(300); } catch (e) { /* ignore */ }
 }
+function tone(f, t0, len, vol, type) { try { const A = window.AudioContext || window.webkitAudioContext; if (!A) return; S.ac = S.ac || new A(); const o = S.ac.createOscillator(), g = S.ac.createGain(); o.type = type || 'sine'; o.frequency.value = f; o.connect(g); g.connect(S.ac.destination); const t = S.ac.currentTime + t0; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len); o.start(t); o.stop(t + len + 0.02); } catch (e) { /* no sound */ } }
+function bell(n) { for (let i = 0; i < (n || 1); i++) { tone(660, i * 0.55, 1.2, 0.35, 'triangle'); tone(1320, i * 0.55, 0.8, 0.12); } try { if (navigator.vibrate) navigator.vibrate(500); } catch (e) { /* ignore */ } }
+function clap() { tone(2200, 0, 0.06, 0.4, 'square'); tone(2200, 0.18, 0.06, 0.4, 'square'); }
 function restStart(sec) {
   restStop(); beep(0);
   const bar = document.createElement('div'); bar.id = 'rest'; bar.setAttribute('role', 'timer'); bar.setAttribute('aria-live', 'off');
@@ -126,9 +132,9 @@ function itBody() {
       '<div class="row"><button data-act="itpause">' + (T.paused ? 'Resume' : 'Pause') + '</button><button class="r" data-act="itstop">Stop</button></div>';
   }
   return '<div class="segc" role="group" aria-label="Timer type">' + Object.keys(IT_PRESET).map((k) => '<button class="' + (T.mode === k ? 'on' : '') + '" aria-pressed="' + (T.mode === k) + '" data-act="itmode" data-m="' + k + '">' + IT_PRESET[k].label + '</button>').join('') + '</div>' +
-    '<p class="mut small">' + { emom: 'A new round starts every interval. Do the work, rest what is left.', tabata: '20 s hard, 10 s rest, 8 rounds.', amrap: 'As many rounds as possible in the time.', custom: 'Set your own work, rest and rounds.' }[T.mode] + '</p>' +
+    '<p class="mut small">' + { rounds: 'Fight rounds: a clap 10 s before the end, a bell to start and stop.', emom: 'A new round starts every interval. Do the work, rest what is left.', tabata: '20 s hard, 10 s rest, 8 rounds.', amrap: 'As many rounds as possible in the time.', custom: 'Set your own work, rest and rounds.' }[T.mode] + '</p>' +
     '<div class="row three">' +
-    '<div><label class="mut small" for="itw">' + (T.mode === 'amrap' ? 'Minutes' : 'Work (s)') + '</label><input id="itw" type="number" inputmode="numeric" min="5" max="3600" value="' + (T.mode === 'amrap' ? T.w / 60 : T.w) + '"></div>' +
+    '<div><label class="mut small" for="itw">' + (T.mode === 'amrap' ? 'Minutes' : T.mode === 'rounds' ? 'Round (min)' : 'Work (s)') + '</label><input id="itw" type="number" inputmode="decimal" min="0.5" max="3600" value="' + (T.mode === 'amrap' || T.mode === 'rounds' ? T.w / 60 : T.w) + '"></div>' +
     (T.mode === 'amrap' || T.mode === 'emom' ? '' : '<div><label class="mut small" for="itr">Rest (s)</label><input id="itr" type="number" inputmode="numeric" min="0" max="600" value="' + T.r + '"></div>') +
     (T.mode === 'amrap' ? '' : '<div><label class="mut small" for="itn">Rounds</label><input id="itn" type="number" inputmode="numeric" min="1" max="100" value="' + T.n + '"></div>') + '</div>' +
     '<button class="p" style="width:100%;margin-top:20px" data-act="itstart">' + ICON(TI.play, 'ib') + ' Start</button>';
@@ -140,7 +146,7 @@ function itOpen(mode, w, r, n) {
 }
 function itStart() {
   const T = S.it, w = Number(($('#itw') || {}).value), r = Number(($('#itr') || { value: T.mode === 'emom' || T.mode === 'amrap' ? 0 : T.r }).value), n = Number(($('#itn') || { value: 1 }).value);
-  T.w = T.mode === 'amrap' ? Math.max(1, w) * 60 : Math.max(5, w || 0); T.r = Math.max(0, r || 0); T.n = T.mode === 'amrap' ? 1 : Math.max(1, Math.min(100, n || 1));
+  T.w = T.mode === 'amrap' || T.mode === 'rounds' ? Math.round(Math.max(0.5, w || 0) * 60) : Math.max(5, w || 0); T.r = Math.max(0, r || 0); T.n = T.mode === 'amrap' ? 1 : Math.max(1, Math.min(100, n || 1));
   Object.assign(T, { run: true, phase: 'get', left: 5, round: 1, paused: false, last: Date.now() });
   try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then((l) => { S.wl = l; }).catch(() => {}); } catch (e) { /* ignore */ }
   refreshSheet('it', itBody()); itTick();
@@ -152,11 +158,12 @@ function itTick() {
     const now = Date.now(); T.acc = (T.acc || 0) + (now - T.last); T.last = now;
     while (T.acc >= 1000) {
       T.acc -= 1000; T.left--;
-      if (T.left <= 3 && T.left > 0) beep(1);
+      if (T.mode === 'rounds' && T.phase === 'work' && T.left === 10) clap();
+      else if (T.left <= 3 && T.left > 0 && T.mode !== 'rounds') beep(1);
       if (T.left <= 0) {
-        if (T.phase === 'get') { T.phase = 'work'; T.left = T.w; beep(2); }
-        else if (T.phase === 'work' && T.r > 0) { T.phase = 'rest'; T.left = T.r; beep(2); }
-        else { T.round++; if (T.round > T.n) { T.phase = 'done'; T.left = 0; beep(4); refreshSheet('it', itBody()); itEnd(); return; } T.phase = 'work'; T.left = T.w; beep(2); }
+        if (T.phase === 'get') { T.phase = 'work'; T.left = T.w; T.mode === 'rounds' ? bell() : beep(2); }
+        else if (T.phase === 'work' && T.r > 0) { T.phase = 'rest'; T.left = T.r; T.mode === 'rounds' ? bell(3) : beep(2); }
+        else { T.round++; if (T.round > T.n) { T.phase = 'done'; T.left = 0; T.mode === 'rounds' ? bell(3) : beep(4); refreshSheet('it', itBody()); itEnd(); return; } T.phase = 'work'; T.left = T.w; T.mode === 'rounds' ? bell() : beep(2); }
         refreshSheet('it', itBody());
       }
     }
