@@ -132,7 +132,7 @@ function normalize(d) {
   Object.values(d.logs).forEach((l) => l.sort(byDate));
   d.verdicts = d.verdicts || []; d.docs = d.docs || []; d.interests = d.interests || []; d.library = d.library || [];
   d.feedback = d.feedback || []; d.prs = d.prs || []; d.programs = d.programs || []; d.overrides = d.overrides || []; d.ai = !!d.ai;
-  ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek', 'skills', 'shoes', 'mobility'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {};
+  ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek', 'skills', 'shoes', 'mobility'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {}; d.hist = d.hist || {}; ['mealalts', 'stock', 'memory'].forEach((k) => { d[k] = d[k] || []; });
   return d;
 }
 
@@ -304,7 +304,7 @@ function tiles(w) {
 function heroCard(ds, w, ch, ses) {
   const d = d0(), p = ses && ses.p;
   const rec = w && w.verdict ? Number(w.recovery) || 0 : null;
-  const v = w && w.verdict ? w.verdict : 'none';
+  const v = w && /^(keep|reduce|swap)$/.test(w.verdict) ? w.verdict : 'none';
   const V = {
     keep: ['✓', 'Good to go', 'Recovery ' + rec + '%. Do the full session as planned.'],
     reduce: ['↓', 'Do it, but go lighter', 'Recovery ' + rec + '%. Drop the last block and use about 80% of your weights.'],
@@ -341,8 +341,8 @@ function viewToday() {
   const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p, w = whoopFor(ds), ch = verdictChoice(ds);
   let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
     '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
-  h += syncBanner() + tzBanner();
-  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + missedCard() + easeCard() + tipCard();
+  h += syncBanner() + tzBanner() + sickCard() + briefCard();
+  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + shortNightCard() + missedCard() + easeCard() + tipCard();
   const extras = () => foodCheckCard(true) + cutCard() + weeklyCard(true) + monthlyCard(true) + prCelebrate() + sleepCard() + coachCard() + raceCard() + raceDayLink();
   if (!p) return h + extras();
 
@@ -370,7 +370,7 @@ function viewToday() {
   }).join('') + ml.filter((r) => r.status === 'extra').map((r) => '<button role="listitem" class="tl-i st-extra" data-act="msheet" data-slot="' + esc(r.slot) + '"><span class="tl-t">' + esc(r.time) + '</span><span class="tl-ic">+</span><span class="tl-n">' + esc(r.extra_name) + '</span></button>').join('') +
     '<button class="tl-i add" data-act="mextra" aria-label="Add a snack"><span class="tl-t">&nbsp;</span><span class="tl-ic">' + ICON(I.plus) + '</span><span class="tl-n">Snack</span></button></div>';
 
-  h += suppCard(p);
+  h += suppCard(p) + stackCard();
   // water
   const pct = W.tgt ? Math.min(100, (W.ml / W.tgt) * 100) : 0;
   h += '<h2 id="sec-water">Water</h2><section class="card water' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp" style="align-items:baseline"><div><span class="big">' + cnt(wNum(W.ml), wDec(null, true)) + '</span><span class="unit"> / ' + wFmt(W.tgt) + '</span></div><span class="mut small">' + (W.ml >= W.tgt ? 'Goal reached ✓' : Math.round(pct) + '%') + '</span></div>' +
@@ -420,7 +420,7 @@ function mealSheet(slot) {
   if (!m) { if (r) infoSheet(r.extra_name || 'Snack', '<p class="mut">' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</p>' + (r.note ? '<p class="small" style="margin-top:8px">' + esc(r.note).replace(/; /g, '<br>') + '</p>' : '') + '<button class="r" style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Delete</button>'); return; }
   let b = '<p class="mut small">Planned ' + esc(m.time) + ' · ' + esc(m.kcal) + ' kcal</p><p style="margin:12px 0">' + esc(m.items) + '</p>' + (m.supps ? '<p class="supps">Supplements · ' + esc(m.supps) + '</p>' : '');
   if (r) b += '<div class="row sp" style="margin-top:20px"><span class="pill ' + (r.status === 'skipped' ? 'swap' : 'keep') + '">' + esc(r.status.toUpperCase()) + (r.time ? ' · ' + esc(r.time) : '') + '</span>' + (r.note ? '<span class="mut small">' + esc(r.note) + '</span>' : '') + '</div><button style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Undo</button>';
-  else b += '<label for="mt" class="mut small" style="margin:20px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '"><div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(slot) + '">Swap</button></div>';
+  else b += '<label for="mt" class="mut small" style="margin:20px 0 8px">Time you ate it</label><input type="time" id="mt" value="' + nowTime() + '"><div class="row" style="margin-top:16px"><button class="g" data-act="mate" data-slot="' + esc(slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(slot) + '">Swap</button></div>' + altsHTML(p.daytype, slot);
   infoSheet(m.name, b);
 }
 function secInfo(h) {
@@ -567,7 +567,7 @@ const LIB_COL = { Kettlebell: ['#f97316', '#ef4444'], 'Animal Flow': ['#22c55e',
 function viewTrain() {
   const today = todayStr(), d = d0(), sel = S.viewDay || today;
   const start = dateAdd(today, -new Date(today + 'T12:00:00Z').getUTCDay());
-  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + deloadCard() + '<div class="wk" role="group" aria-label="This week">';
+  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + tuneCard() + deloadCard() + '<div class="wk" role="group" aria-label="This week">';
   for (let i = 0; i < 7; i++) {
     const ds = dateAdd(start, i), done = logs('WorkoutLog', ds).some((r) => r.status === 'done');
     h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today' : '') + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + ds + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i] + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd"></i></button>';
@@ -578,7 +578,7 @@ function viewTrain() {
     const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
     h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' +
       (ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '</span></p>' : '') +
-      '<div class="sesstools" role="group" aria-label="Session tools"><button class="chip" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="chip" data-act="itopen" data-m="emom">Timer</button><button class="chip" data-act="adjopen" data-m="short" data-d="' + sel + '">Short on time</button><button class="chip" data-act="adjopen" data-m="ss" data-d="' + sel + '">Superset</button></div>' +
+      '<div class="sesstools" role="group" aria-label="Session tools"><button class="chip" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="chip" data-act="itopen" data-m="emom">Timer</button><button class="chip" data-act="adjopen" data-m="low" data-d="' + sel + '">Plan B</button><button class="chip" data-act="adjopen" data-m="short" data-d="' + sel + '">Short on time</button></div>' +
       (ses.p.moved ? '<p class="moved">' + ICON(CI.move) + '<span>Moved here ' + esc(String(ses.p.reason || '').replace(/(\d{4}-\d{2}-\d{2})/, (m) => niceDate(m))) + '</span><button class="txt fit" data-act="mvundo" data-d="' + esc(sel) + '" data-r="' + esc(ses.p.reason) + '">Undo</button></p>' : '') + blocksHTML(ses.details, sel) + '</section>';
   }
   h += toolsCard() + loadCard() + skillsCard() + shoesCard();
@@ -617,7 +617,7 @@ function viewInsights() {
   h += '<h2>Waiting for you</h2>';
   d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
   }
-  const T = [['recovery', 'Recovery'], ['training', 'Training'], ['body', 'Body'], ['wins', 'Wins']];
+  const T = [['recovery', 'Recovery'], ['training', 'Training'], ['body', 'Body'], ['you', 'You']];
   h += '<div class="instab" role="tablist" aria-label="Insights sections">' + T.map(([k, l]) => '<button role="tab" aria-selected="' + (k === tab) + '" class="' + (k === tab ? 'on' : '') + '" data-act="instab" data-t="' + k + '">' + l + '</button>').join('') + '</div>';
   if (tab === 'recovery') {
     h += '<h2>WHOOP · last 14 days</h2>';
@@ -640,7 +640,7 @@ function viewInsights() {
   }
     h += whatWorksCard() + affectCard() + weeklyCard(false) + monthlyCard(false);
   } else if (tab === 'training') {
-    h += volumeCard() + prsSection() + testsCard() + mobCard() + goalsSection();
+    h += volumeCard() + prsSection() + standardsCard() + testsCard() + mobCard() + goalsSection();
   } else if (tab === 'body') {
     h += cutCard();
   const b = d.logs.Body.slice(-8).reverse();
@@ -652,7 +652,7 @@ function viewInsights() {
   }).join('') + '</div>';
     h += foodCheckCard(false) + photosSection();
   } else {
-    h += '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
+    h += consistencyCard() + patternsCard() + realityCard() + rulesCard() + predictCard() + '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
   }
   if (S.failed.length) h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small" style="padding:6px 0">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:12px" data-act="clearfail">Clear</button></div>';
   return h;
@@ -672,7 +672,7 @@ function viewMore() {
     row({ act: 'docsheet', ic: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>', bg: '#ef4444', t: 'Program documents', s: d.docs.length ? d.docs.length + ' uploaded' : 'Upload PDFs, plans, notes', end: d.docs.length ? '<span class="count">' + d.docs.length + '</span>' : '' }) +
     row({ act: 'inspsheet', ic: I.play, bg: '#d6249f', t: 'Reels and TikToks', s: d.library.length + ' saved · add what inspires you', end: '<span class="count">' + d.library.length + '</span>' }) +
     row({ act: 'intsheet', ic: '<path d="m3 20 6-11 4 6 3-4 5 9z"/><circle cx="17" cy="6" r="2"/>', bg: '#14b8a6', t: 'Sports I\'m into', s: ints.length ? esc(ints.slice(0, 3).join(', ')) + (ints.length > 3 ? ' +' + (ints.length - 3) : '') : 'e.g. rock climbing, swimming', end: ints.length ? '<span class="count">' + ints.length + '</span>' : '' }) + '</div>';
-  h += '<h2>Coach</h2><div class="card list">' + row({ act: 'chatopen', ic: LI.chat, bg: 'var(--accFill)', t: 'Ask your coach', s: 'Questions about training, food, recovery' }) +
+  h += '<h2>Coach</h2><div class="card list">' + row({ act: 'chatopen', ic: LI.chat, bg: 'var(--accFill)', t: 'Ask your coach', s: 'Questions about training, food, recovery' }) + row({ act: 'memopen', ic: CI.spark, bg: '#8b5cf6', t: 'What your coach remembers', s: (d.memory || []).length ? d.memory.length + ' thing' + (d.memory.length > 1 ? 's' : '') : 'Nothing yet', end: (d.memory || []).length ? '<span class="count">' + d.memory.length + '</span>' : '' }) +
     row({ act: 'remopen', ic: LI.bell, bg: '#ef4444', t: 'Reminders', s: 'Meals, workout, water, bedtime' }) + row({ act: 'pwopen', ic: CI.cal, bg: '#0ea5e9', t: 'Plan your week', s: 'Move sessions around your calendar' }) +
     row({ act: 'shareopen', ic: BI.share, bg: '#14b8a6', t: 'Share my week', s: D().cfg.share_token ? 'Link is on' : 'Read-only link for a friend or coach' }) + row({ act: 'fastopen', ic: BI.moonc, bg: '#6d5ce8', t: 'Fasting mode', s: fasting() ? 'On · iftar ' + esc(fasting().iftar) : 'Ramadan or daily fasting' }) +
     row({ act: 'cutopen', ic: BI.scale, bg: '#f59e0b', t: 'Weight plan', s: cut() ? 'Target ' + cut().target + ' kg' : 'Safe weight loss to a target' }) + row({ act: 'tropen', ic: TI.plane, bg: '#6d5ce8', t: 'Travel mode', s: travel() ? 'On · ' + esc(travel().place) : 'Off' }) + '</div>';
@@ -681,7 +681,7 @@ function viewMore() {
     row({ act: 'cw', ic: I.link, bg: '#111', t: 'WHOOP', s: 'Recovery, strain and sleep · read-only', end: st(d.connected.whoop) }) +
     row({ act: 'cs', ic: I.run, bg: '#fc4c02', t: 'Strava', s: 'Your activities · read-only', end: st(d.connected.strava) }) +
     row({ act: 'reload', ic: I.out, bg: '#64748b', t: 'Reload from sheet', s: 'Use after editing your Google Sheet' }) + '</div>';
-  h += '<h2>Body</h2><div class="card list">' + row({ act: 'body', ic: I.scale, bg: '#14b8a6', t: 'Log weight and waist', s: lastB ? 'Last: ' + esc(lastB.weight) + ' kg on ' + esc(niceDate(lastB.date)) : 'No entries yet' }) + '</div>';
+  h += '<h2>Body</h2><div class="card list">' + row({ act: 'body', ic: I.scale, bg: '#14b8a6', t: 'Log weight and waist', s: lastB ? 'Last: ' + esc(lastB.weight) + ' kg on ' + esc(niceDate(lastB.date)) : 'No entries yet' }) + row({ act: 'sickopen', ic: TI.heart, bg: sick() ? '#ff453a' : '#64748b', t: sick() ? 'Illness mode · on' : 'I\'m ill', s: sick() ? 'Tap "I feel better" on Today when you\'re back' : 'Pause training and recover' }) + '</div>' + stockCard();
   h += '<h2>Events</h2><div class="card list">' + d.events.map((e) => {
     const left = e.date ? daysBetween(todayStr(), e.date) : null;
     return row({ act: 'evsheet', data: ' data-n="' + esc(e.name) + '" data-d="' + esc(e.date) + '"', ic: I.flag, bg: '#f59e0b', t: esc(e.name), s: e.date ? esc(niceDate(e.date)) : 'Date not set', end: left === null ? '' : left >= 0 ? '<span class="count">' + left + 'd</span>' : '<span class="mut small">passed</span>' });
@@ -757,10 +757,10 @@ document.addEventListener('click', async (ev) => {
       break;
     }
     case 'vundo': send({ action: 'suggest_decide', id: 'verdict-' + ds, status: 'cleared', date: ds, text: 'Verdict choice cleared' }); break;
-    case 'wdone': case 'wskip': send({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: a === 'wdone' ? 'done' : 'skipped', note: ses.mode, time: nowTime() } });
+    case 'wdone': case 'wskip': if (a === 'wdone') stackNudge('workout'); send({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: a === 'wdone' ? 'done' : 'skipped', note: ses.mode, time: nowTime() } });
       if (a === 'wdone') { S.rate = { date: ds, session: ses.name }; setTimeout(() => infoSheet('Rate your session', rateBody(), 'rate'), 350); } break;
     case 'wundo': send({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: ses.name } }); break;
-    case 'mate': S.flash = 'meal'; autoSupps(el.dataset.slot); send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
+    case 'mate': S.flash = 'meal'; autoSupps(el.dataset.slot); stackNudge(el.dataset.slot); send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'ate', time: timeVal(), note: '', extra_name: '', kcal: '' } }); break;
     case 'mskip': send({ action: 'log', table: 'MealLog', row: { date: ds, slot: el.dataset.slot, status: 'skipped', time: '', note: '', extra_name: '', kcal: '' } }); break;
     case 'mundo': send({ action: 'del', table: 'MealLog', row: { date: ds, slot: el.dataset.slot } }); break;
     case 'mswap': foodOpen('swap', el.dataset.slot, timeVal()); break;
