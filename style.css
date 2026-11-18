@@ -968,3 +968,87 @@ button.card.gcc{display:flex;flex-direction:column;align-items:flex-start;gap:6p
 .md-t th,.md-t td{text-align:left;padding:8px 10px 8px 0;border-bottom:1px solid var(--sep);vertical-align:top}
 .md-t th{color:var(--tx2);font-weight:600;font-size:.8125rem}
 .md code{background:var(--card2);padding:1px 5px;border-radius:5px;font-size:.85em}
+
+/* ---------- batch 8: reels ---------- */
+.reelrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.reelchip{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:8px 12px;border-radius:12px;background:var(--card2);color:var(--tx);border:1px solid var(--sep);font-size:.8125rem;font-weight:600;text-align:left;line-height:1.3}
+.reelchip span{color:#d6249f}
+.rltags{margin:12px 0 4px}
+#rlq{width:100%}
+
+/* ---------- redesign: Today timeline ---------- */
+.tline{padding:var(--s4) var(--s4) var(--s2)}
+.tline-h{display:flex;justify-content:space-between;gap:12px;font-size:.8125rem;color:var(--tx2);padding-bottom:10px;border-bottom:1px solid var(--sep);flex-wrap:wrap}
+.tline-h b{color:var(--tx);font-weight:700}
+.trs{list-style:none;margin:0;padding:0;position:relative}
+.tr{display:grid;grid-template-columns:3.4em 22px 1fr;column-gap:10px;align-items:start;position:relative;padding:10px 0}
+.tr+.tr{border-top:1px solid var(--sep)}
+.tr::before{content:"";position:absolute;left:calc(3.4em + 10px + 10px);top:0;bottom:0;width:2px;background:var(--sep)}
+.tr:first-child::before{top:50%}.tr:last-child::before{bottom:50%}
+.tr-t{font-size:.8125rem;color:var(--tx2);font-variant-numeric:tabular-nums;padding-top:12px;font-weight:500}
+.tr-dot{position:relative;z-index:1;width:22px;height:22px;margin-top:11px;border-radius:50%;background:var(--card2);border:2px solid var(--sep);display:grid;place-items:center;font-size:.7rem;font-weight:800;color:#fff;line-height:1}
+.st-ate .tr-dot,.st-swap .tr-dot,.st-extra .tr-dot{background:var(--ok);border-color:var(--ok)}
+.st-skipped .tr-dot{background:var(--bad);border-color:var(--bad)}
+.st-next .tr-dot{background:var(--card);border-color:var(--acc);box-shadow:0 0 0 4px var(--accTint)}
+.st-next .tr-dot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.tr-b{min-width:0}
+.tr-m{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:8px;width:100%;min-height:44px;background:none;border:0;padding:4px 0;text-align:left;color:var(--tx)}
+.tr-m b{font-size:1rem;font-weight:600;line-height:1.25}
+.tr-m span{grid-column:1;font-size:.8125rem;color:var(--tx2);line-height:1.3}
+.tr-m .chev{grid-row:1/span 2;grid-column:2;color:var(--tx3);font-style:normal;font-size:1.2rem}
+.st-next .tr-m span{color:var(--acc);font-weight:600}
+.st-ate .tr-m span,.st-swap .tr-m span{color:var(--ok)}
+.st-skipped .tr-m b{color:var(--tx3);text-decoration:line-through}
+.tr-s{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 4px}
+.tr-s .spill{min-height:36px;padding:6px 12px;border-radius:99px;background:var(--card2);border:1px solid var(--sep);color:var(--tx);font-size:.8125rem;font-weight:500;line-height:1.2}
+.tr-s .spill.on{background:var(--okTint);border-color:transparent;color:var(--ok);font-weight:600}
+.tr-add{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;margin-top:4px;border-top:1px solid var(--sep);background:none;color:var(--acc);font-weight:600;font-size:.9375rem;border-radius:0}
+.tr-add svg{width:18px;height:18px}
+
+/* ---------- redesign: Train week strip ---------- */
+.wk{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:0 0 var(--s5);padding:6px;background:var(--card);border-radius:18px;overflow:visible}
+.wk button{min-height:58px;padding:6px 0 4px;border-radius:13px;background:none;box-shadow:none;gap:1px}
+.wk button small{font-size:.6875rem;color:var(--tx3);font-weight:600;text-transform:uppercase}
+.wk button b{font-size:1.0625rem;line-height:1.2}
+.wk button.today:not(.on){box-shadow:none;color:var(--acc)}.wk button.today:not(.on) small{color:var(--acc)}
+.wk button.on{background:var(--accFill);color:#fff}
+.wk .wd{width:6px;height:6px;border-radius:50%;margin-top:3px;font-size:0;font-style:normal;display:grid;place-items:center}
+.wk .ld-hard .wd{background:#ff6b5e}.wk .ld-mod .wd{background:#f5b83d}.wk .ld-rec .wd{background:#4fd1c5}.wk .ld-rest .wd{background:transparent;box-shadow:inset 0 0 0 1.5px var(--tx3)}
+.wk button.done .wd{width:14px;height:14px;background:var(--ok);box-shadow:none;color:#fff;font-size:.55rem;font-weight:900;margin-top:0}
+.wk button.on .wd{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+.wklegend{display:flex;gap:14px;flex-wrap:wrap;font-size:.75rem;color:var(--tx2);margin:-10px 0 var(--s5) 4px}
+.wklegend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+
+/* ---------- redesign: Insights tabs + WHOOP card ---------- */
+.instab{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;background:none;border-bottom:1px solid var(--sep);margin:0 0 var(--s5);overflow:visible}
+.instab button{min-height:46px;padding:0 2px;border-radius:0;background:none;box-shadow:none;color:var(--tx2);font-weight:600;font-size:.9375rem;position:relative}
+.instab button.on{background:none;color:var(--tx)}
+.instab button.on::after{content:"";position:absolute;left:18%;right:18%;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--acc)}
+.wcard{padding-top:var(--s3)}
+.mchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1*var(--s4)) 4px;padding:0 var(--s4)}
+.mchips::-webkit-scrollbar{display:none}
+.mchips button{flex:none;min-height:36px;padding:0 14px;border-radius:99px;background:var(--card2);color:var(--tx2);font-size:.8125rem;font-weight:600;border:0}
+.mchips button.on{background:var(--tx);color:var(--bg)}
+.wstats{display:grid;grid-template-columns:repeat(3,1fr);margin:var(--s3) 0 var(--s2)}
+.wstats div{display:flex;flex-direction:column;gap:2px;padding:4px 10px}
+.wstats div+div{border-left:1px solid var(--sep)}
+.wstats div:first-child{padding-left:0}
+.wcard .wstats>div>span{font-size:.75rem;color:var(--tx2);font-weight:500}
+.wcard .wstats b{display:block;font-size:1.5rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.wcard .wstats small{font-size:.8125rem;color:var(--tx2);font-weight:500;margin-left:1px}
+.instab{display:flex;gap:22px;overflow-x:auto;scrollbar-width:none;padding:0 2px}
+.instab::-webkit-scrollbar{display:none}
+.instab button{flex:none;padding:0 2px}
+.instab button.on::after{left:0;right:0}
+.tr{grid-template-columns:3em 22px 1fr}
+.tr::before{left:calc(3em + 10px + 10px)}
+.tr-s .spill{font-size:.78rem;padding:5px 11px;min-height:34px}
+.tr-s .spill{min-height:44px}
+.wk button.done .wd{width:16px;height:16px;color:#05290f;font-size:.62rem}
+.st-ate .tr-dot,.st-swap .tr-dot,.st-extra .tr-dot{color:#05290f}
+.instab{display:grid;grid-template-columns:repeat(4,auto);justify-content:space-between;gap:8px;overflow:visible}
+.instab button{min-width:44px;padding:0 6px}
+.mchips button{min-height:44px}
+.wk{grid-template-columns:repeat(7,minmax(44px,1fr));gap:2px;padding:4px;overflow-x:auto;scrollbar-width:none}
+.mchips{flex-wrap:wrap;overflow:visible;margin:0 0 4px;padding:0}
+@media (prefers-color-scheme:light){.st-ate .tr-dot,.st-swap .tr-dot,.st-extra .tr-dot,.wk button.done .wd{color:#fff}}

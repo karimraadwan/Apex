@@ -140,7 +140,7 @@ function pwBody() {
 }
 async function pwOpen() {
   S.pwSel = null; S.pw = { loading: true }; infoSheet('Plan your week', pwBody(), 'pw');
-  try { const j = await call({ action: 'week_busy' }); S.pw = { busy: j.busy }; } catch (e) { S.pw = { err: e.message === 'offline' ? 'Offline: calendar not shown.' : 'Calendar not shown (' + e.message + ').' }; }
+  try { const j = await call({ action: 'week_busy' }); S.pw = { busy: j.busy }; } catch (e) { S.pw = { err: e.message === 'offline' ? 'Offline: your calendar is not shown.' : /permission|calendar/i.test(e.message) ? 'Apex can\u2019t read your Google Calendar yet, so busy times aren\u2019t shown. To allow it: Apps Script › choose authorizeCalendar › Run › Allow, then Deploy › New version.' : 'Your calendar couldn\u2019t be read right now. Try again later.' }; }
   refreshSheet('pw', pwBody());
 }
 function pwSwap(a, b) {

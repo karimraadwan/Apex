@@ -363,14 +363,10 @@ function viewToday() {
       (next.supps ? '<p class="supps">Supplements · ' + esc(next.supps) + '</p>' : '') +
       '<div class="row" style="margin-top:20px"><button class="g" data-act="mate" data-slot="' + esc(next.slot) + '">Ate it</button><button data-act="mskip" data-slot="' + esc(next.slot) + '">Skip</button><button data-act="mswap" data-slot="' + esc(next.slot) + '">Swap</button></div></section>';
   } else h += '<section class="card upnext done"><div class="eyebrow2"><span>ALL DONE</span></div><h3>Every meal logged today</h3><p class="mut">' + eaten + ' kcal so far. Nice work.</p></section>';
-  // day timeline
-  h += '<div class="tl" role="list" aria-label="Today\'s meals">' + ms.map((m) => {
-    const r = ml.find((x) => x.slot === m.slot), st = r ? r.status : m === next ? 'next' : 'todo';
-    return '<button role="listitem" class="tl-i st-' + st + '" data-act="msheet" data-slot="' + esc(m.slot) + '" aria-label="' + esc(m.name) + ', ' + (r ? r.status : 'not logged') + '"><span class="tl-t">' + esc(r && r.time ? r.time : m.time) + '</span><span class="tl-ic">' + ST_ICON[st] + '</span><span class="tl-n">' + esc(m.name.replace('Morning protocol', 'Morning').replace(' + soup', '')) + '</span></button>';
-  }).join('') + ml.filter((r) => r.status === 'extra').map((r) => '<button role="listitem" class="tl-i st-extra" data-act="msheet" data-slot="' + esc(r.slot) + '"><span class="tl-t">' + esc(r.time) + '</span><span class="tl-ic">+</span><span class="tl-n">' + esc(r.extra_name) + '</span></button>').join('') +
-    '<button class="tl-i add" data-act="mextra" aria-label="Add a snack"><span class="tl-t">&nbsp;</span><span class="tl-ic">' + ICON(I.plus) + '</span><span class="tl-n">Snack</span></button></div>';
+  // day timeline: meals and their supplements in one list
+  h += dayTimeline(ms, ml, next, p);
 
-  h += suppCard(p) + stackCard();
+  h += stackCard();
   // water
   const pct = W.tgt ? Math.min(100, (W.ml / W.tgt) * 100) : 0;
   h += '<h2 id="sec-water">Water</h2><section class="card water' + (S.flash === 'water' ? ' pop' : '') + '"><div class="row sp" style="align-items:baseline"><div><span class="big">' + cnt(wNum(W.ml), wDec(null, true)) + '</span><span class="unit"> / ' + wFmt(W.tgt) + '</span></div><span class="mut small">' + (W.ml >= W.tgt ? 'Goal reached ✓' : Math.round(pct) + '%') + '</span></div>' +
@@ -459,7 +455,7 @@ function blocksHTML(txt, day) {
     return '<section class="wo-sec ' + k.kind + '"><div class="wo-h">' + (k.tag ? '<span class="wo-tag">' + esc(k.tag) + '</span>' : '') + (k.title ? '<b>' + esc(k.title) + '</b>' : '') + (k.rest ? '<span class="wo-rest">' + ICON('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>') + 'Rest ' + esc(k.rest) + '</span>' : '') + '</div><ul class="wo-list">' + items + '</ul></section>';
   }).join('');
   const pct = n ? Math.round((done / n) * 100) : 0;
-  return '<div class="det wo"><div class="wo-prog"><span>' + done + ' of ' + n + ' done</span><div class="bar"><i style="width:' + pct + '%"></i></div></div>' + body + '</div>';
+  return reelify('<div class="det wo"><div class="wo-prog"><span>' + done + ' of ' + n + ' done</span><div class="bar"><i style="width:' + pct + '%"></i></div></div>' + body + '</div>');
 }
 function parseDetails(txt) { return blocksHTML(txt); }
 
@@ -570,9 +566,10 @@ function viewTrain() {
   let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + tuneCard() + deloadCard() + '<div class="wk" role="group" aria-label="This week">';
   for (let i = 0; i < 7; i++) {
     const ds = dateAdd(start, i), done = logs('WorkoutLog', ds).some((r) => r.status === 'done');
-    h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today' : '') + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + ds + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i] + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd"></i></button>';
+    const sv = sessionFor(ds), ld = !sv || sv.p.load === 'Rest' ? 'rest' : sv.p.load === 'Hard' ? 'hard' : sv.p.load === 'Moderate' ? 'mod' : 'rec';
+    h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today ' : '') + 'ld-' + ld + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + Number(ds.slice(8)) + ', ' + (sv ? sv.p.session + ', ' + sv.p.load : 'rest') + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i].slice(0, 1) + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd" aria-hidden="true">' + (done ? '✓' : '') + '</i></button>';
   }
-  h += '</div>';
+  h += '</div><p class="wklegend" aria-hidden="true"><span><i style="background:#ff6b5e"></i>Hard</span><span><i style="background:#f5b83d"></i>Moderate</span><span><i style="background:#4fd1c5"></i>Easy</span><span><i style="background:var(--ok)"></i>Done</span></p>';
   const ses = sessionFor(sel);
   if (ses) {
     const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
@@ -621,18 +618,18 @@ function viewInsights() {
   h += '<div class="instab" role="tablist" aria-label="Insights sections">' + T.map(([k, l]) => '<button role="tab" aria-selected="' + (k === tab) + '" class="' + (k === tab ? 'on' : '') + '" data-act="instab" data-t="' + k + '">' + l + '</button>').join('') + '</div>';
   if (tab === 'recovery') {
     h += '<h2>WHOOP · last 14 days</h2>';
-  h += '<div class="segc" role="tablist">' + Object.keys(METRICS).map((k) => '<button role="tab" aria-selected="' + (k === mk) + '" class="' + (k === mk ? 'on' : '') + '" data-act="metric" data-m="' + k + '">' + METRICS[k][0] + '</button>').join('') + '</div>';
-  if (!d.whoop.length) h += '<div class="card mut">No WHOOP data yet. Connect WHOOP in More.</div>';
+  h += '<section class="card wcard"><div class="mchips" role="tablist" aria-label="Metric">' + Object.keys(METRICS).map((k) => '<button role="tab" aria-selected="' + (k === mk) + '" class="' + (k === mk ? 'on' : '') + '" data-act="metric" data-m="' + k + '">' + METRICS[k][0] + '</button>').join('') + '</div>';
+  if (!d.whoop.length) h += '<p class="mut">No WHOOP data yet. Connect WHOOP in More.</p></section>';
   else {
     const vals = (n) => d.whoop.slice(-n).map((x) => Number(x[mk])).filter((x) => x > 0);
     const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
     const last = d.whoop[d.whoop.length - 1], age = daysBetween(last.date, today);
     const a7 = avg(vals(7)), a30 = avg(vals(30));
-    h += '<div class="tiles stats">' + [['Latest', Number(last[mk])], ['7-day avg', a7], ['30-day avg', a30]].map(([l, v]) => '<div class="tile"><span class="tl-l">' + l + '</span><b>' + (v ? cnt(v, M[2]) : '–') + '<small> ' + M[1] + '</small></b></div>').join('') + '</div>';
+    h += '<div class="wstats">' + [['Latest', Number(last[mk])], ['7-day avg', a7], ['30-day avg', a30]].map(([l, v]) => '<div><span>' + l + '</span><b>' + (v ? cnt(v, M[2]) : '–') + '<small>' + (M[1] === '%' ? '%' : ' ' + M[1]) + '</small></b></div>').join('') + '</div>';
     const cols = [];
     for (let i = 13; i >= 0; i--) { const ds = dateAdd(today, -i); cols.push({ ds, w: whoopFor(ds) }); }
     const max = mk === 'recovery' ? 100 : Math.max(1, ...cols.map((c) => (c.w ? Number(c.w[mk]) || 0 : 0))) * 1.1;
-    h += '<section class="card"><div class="chart" role="img" aria-label="' + M[0] + ' by day: ' + cols.filter((c) => c.w).map((c) => c.ds.slice(5) + ' ' + c.w[mk]).join(', ') + '">' + cols.map((c) => {
+    h += '<div class="chart" role="img" aria-label="' + M[0] + ' by day: ' + cols.filter((c) => c.w).map((c) => c.ds.slice(5) + ' ' + c.w[mk]).join(', ') + '">' + cols.map((c) => {
       const v = c.w ? Number(c.w[mk]) || 0 : 0, r = Number(c.w && c.w.recovery) || 0;
       const col = mk === 'recovery' ? (r >= 67 ? 'var(--ok)' : r >= 34 ? 'var(--warn)' : 'var(--bad)') : 'linear-gradient(180deg,var(--acc),var(--accFill))';
       return '<div class="col' + (c.ds === today ? ' now' : '') + '"><span class="v">' + (c.w ? (M[2] ? v.toFixed(1) : Math.round(v)) : '') + '</span><i style="height:' + (c.w ? Math.max(3, Math.round((v / max) * 96)) : 0) + 'px;background:' + col + '"></i><span class="d">' + Number(c.ds.slice(8)) + '</span></div>';
