@@ -146,7 +146,7 @@ function whoopFor(ds) { return D().whoop.find((w) => w.date === ds); }
 function verdictChoice(ds) { const v = D().verdicts.find((x) => x.id === 'verdict-' + ds); return v && (v.status === 'accepted' || v.status === 'rejected') ? v.status : null; }
 
 // B6 / B7: what you actually train after accepting a verdict
-function sessionFor(ds) { return adaptSession(sessionFor0(ds)); }
+function sessionFor(ds) { return ramShift(ds, adaptSession(sessionFor0(ds))); }
 function sessionFor0(ds) {
   // a session you moved here (missed-workout fix) replaces the planned one
   const ov = D().overrides.find((o) => o.date === ds);
@@ -341,8 +341,8 @@ function viewToday() {
   const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p, w = whoopFor(ds), ch = verdictChoice(ds);
   let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
     '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
-  h += syncBanner() + tzBanner() + sickCard() + briefCard();
-  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + shortNightCard() + missedCard() + easeCard() + tipCard();
+  h += syncBanner() + tzBanner() + sickCard() + ramCard() + briefCard() + raceWeekCard() + postRaceCard();
+  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + shortNightCard() + restDayCard() + wrCard() + missedCard() + easeCard() + tipCard();
   const extras = () => foodCheckCard(true) + cutCard() + weeklyCard(true) + monthlyCard(true) + prCelebrate() + sleepCard() + coachCard() + raceCard() + raceDayLink();
   if (!p) return h + extras();
 
@@ -640,7 +640,7 @@ function viewInsights() {
   }
     h += whatWorksCard() + affectCard() + weeklyCard(false) + monthlyCard(false);
   } else if (tab === 'training') {
-    h += volumeCard() + prsSection() + standardsCard() + testsCard() + mobCard() + goalsSection();
+    h += fatigueCard() + volumeCard() + prsSection() + standardsCard() + testsCard() + mobCard() + goalsSection();
   } else if (tab === 'body') {
     h += cutCard();
   const b = d.logs.Body.slice(-8).reverse();
@@ -652,7 +652,7 @@ function viewInsights() {
   }).join('') + '</div>';
     h += foodCheckCard(false) + photosSection();
   } else {
-    h += consistencyCard() + patternsCard() + realityCard() + rulesCard() + predictCard() + '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
+    h += consistencyCard() + thenNowCard() + raceGoalCard() + patternsCard() + realityCard() + rulesCard() + predictCard() + '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
   }
   if (S.failed.length) h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small" style="padding:6px 0">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:12px" data-act="clearfail">Clear</button></div>';
   return h;
@@ -674,7 +674,7 @@ function viewMore() {
     row({ act: 'intsheet', ic: '<path d="m3 20 6-11 4 6 3-4 5 9z"/><circle cx="17" cy="6" r="2"/>', bg: '#14b8a6', t: 'Sports I\'m into', s: ints.length ? esc(ints.slice(0, 3).join(', ')) + (ints.length > 3 ? ' +' + (ints.length - 3) : '') : 'e.g. rock climbing, swimming', end: ints.length ? '<span class="count">' + ints.length + '</span>' : '' }) + '</div>';
   h += '<h2>Coach</h2><div class="card list">' + row({ act: 'chatopen', ic: LI.chat, bg: 'var(--accFill)', t: 'Ask your coach', s: 'Questions about training, food, recovery' }) + row({ act: 'memopen', ic: CI.spark, bg: '#8b5cf6', t: 'What your coach remembers', s: (d.memory || []).length ? d.memory.length + ' thing' + (d.memory.length > 1 ? 's' : '') : 'Nothing yet', end: (d.memory || []).length ? '<span class="count">' + d.memory.length + '</span>' : '' }) +
     row({ act: 'remopen', ic: LI.bell, bg: '#ef4444', t: 'Reminders', s: 'Meals, workout, water, bedtime' }) + row({ act: 'pwopen', ic: CI.cal, bg: '#0ea5e9', t: 'Plan your week', s: 'Move sessions around your calendar' }) +
-    row({ act: 'shareopen', ic: BI.share, bg: '#14b8a6', t: 'Share my week', s: D().cfg.share_token ? 'Link is on' : 'Read-only link for a friend or coach' }) + row({ act: 'fastopen', ic: BI.moonc, bg: '#6d5ce8', t: 'Fasting mode', s: fasting() ? 'On · iftar ' + esc(fasting().iftar) : 'Ramadan or daily fasting' }) +
+    row({ act: 'shareopen', ic: BI.share, bg: '#14b8a6', t: 'Share my week', s: D().cfg.share_token ? 'Link is on' : 'Read-only link for a friend or coach' }) + row({ act: 'ramopen', ic: B6.moon, bg: '#8b5cf6', t: ramadan() ? 'Ramadan mode · on' : 'Ramadan mode', s: ramadan() ? 'From ' + niceDate(ramadan().start) : 'Iftar and suhoor times, training moved' }) + row({ act: 'fastopen', ic: BI.moonc, bg: '#6d5ce8', t: 'Fasting mode', s: fasting() ? 'On · iftar ' + esc(fasting().iftar) : 'Ramadan or daily fasting' }) +
     row({ act: 'cutopen', ic: BI.scale, bg: '#f59e0b', t: 'Weight plan', s: cut() ? 'Target ' + cut().target + ' kg' : 'Safe weight loss to a target' }) + row({ act: 'tropen', ic: TI.plane, bg: '#6d5ce8', t: 'Travel mode', s: travel() ? 'On · ' + esc(travel().place) : 'Off' }) + '</div>';
   h += '<h2>Data</h2><div class="card list">' +
     row({ act: 'sync', ic: I.sync, bg: 'var(--accFill)', t: S.busy ? 'Syncing…' : 'Sync now', s: 'Last good sync: ' + esc(ago(c.last_sync_ok)) }) +
