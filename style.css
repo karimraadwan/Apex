@@ -957,3 +957,14 @@ body:has(.modal) #toast{bottom:auto;top:calc(env(safe-area-inset-top) + 12px);tr
 button.card.gcc{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;width:100%}
 .gcc b{font-size:1.0625rem}
 .gcc .link-t{color:var(--acc);font-size:.875rem;font-weight:600;margin-top:4px}
+
+/* ---------- batch 7 ---------- */
+.md .lbl:first-child{margin-top:0}
+.md-p{margin:8px 0;line-height:1.5}
+.md-l{margin:6px 0 10px;padding-left:20px;line-height:1.5}
+.md-l li{margin:4px 0}
+.md-t{overflow-x:auto;margin:8px 0 12px}
+.md-t table{border-collapse:collapse;width:100%;font-size:.875rem}
+.md-t th,.md-t td{text-align:left;padding:8px 10px 8px 0;border-bottom:1px solid var(--sep);vertical-align:top}
+.md-t th{color:var(--tx2);font-weight:600;font-size:.8125rem}
+.md code{background:var(--card2);padding:1px 5px;border-radius:5px;font-size:.85em}
