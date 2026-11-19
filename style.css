@@ -1052,3 +1052,12 @@ button.card.gcc{display:flex;flex-direction:column;align-items:flex-start;gap:6p
 .wk{grid-template-columns:repeat(7,minmax(44px,1fr));gap:2px;padding:4px;overflow-x:auto;scrollbar-width:none}
 .mchips{flex-wrap:wrap;overflow:visible;margin:0 0 4px;padding:0}
 @media (prefers-color-scheme:light){.st-ate .tr-dot,.st-swap .tr-dot,.st-extra .tr-dot,.wk button.done .wd{color:#fff}}
+
+/* ---------- batch 9 ---------- */
+.recb{width:100%;margin-top:var(--s4);display:flex;align-items:center;justify-content:center;gap:8px}
+.recb svg{width:18px;height:18px}
+.hero-act.tight{margin-top:10px}
+.rec.top{border-color:var(--acc)}
+.recprev summary{cursor:pointer;color:var(--acc);font-weight:600;font-size:.875rem;min-height:44px;display:flex;align-items:center}
+.li.sel{background:var(--accTint)}
+.li.wrap .mut,.li.wrap .li-main span{white-space:normal;overflow:visible;text-overflow:clip}

@@ -132,7 +132,7 @@ function normalize(d) {
   Object.values(d.logs).forEach((l) => l.sort(byDate));
   d.verdicts = d.verdicts || []; d.docs = d.docs || []; d.interests = d.interests || []; d.library = d.library || [];
   d.feedback = d.feedback || []; d.prs = d.prs || []; d.programs = d.programs || []; d.overrides = d.overrides || []; d.ai = !!d.ai;
-  ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek', 'skills', 'shoes', 'mobility'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {}; d.hist = d.hist || {}; ['mealalts', 'stock', 'memory', 'knowledge'].forEach((k) => { d[k] = d[k] || []; });
+  ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek', 'skills', 'shoes', 'mobility'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {}; d.hist = d.hist || {}; ['mealalts', 'stock', 'memory', 'knowledge', 'decisions'].forEach((k) => { d[k] = d[k] || []; });
   return d;
 }
 
@@ -323,11 +323,11 @@ function heroCard(ds, w, ch, ses) {
     '<div class="vbox"><span class="vic" aria-hidden="true">' + V[0] + '</span><div><b>' + esc(V[1]) + '</b><span>' + esc(V[2]) + '</span></div></div>';
   if (w && w.verdict) h += tiles(w);
   if (ses) {
-    if (v !== 'keep' && v !== 'none' && !ch) h += '<div class="row hero-act"><button class="p" data-act="vacc">Accept</button><button data-act="vrej">Keep plan</button></div>';
-    else if (wl) h += '<div class="row sp hero-act"><span class="pill ' + (wl.status === 'done' ? 'keep' : 'swap') + '">' + esc(wl.status.toUpperCase()) + ' · ' + esc(wl.time) + '</span><button class="txt fit" data-act="wundo">Undo</button></div>';
-    else h += '<div class="row hero-act"><button class="g" data-act="wdone">Did it</button><button data-act="wskip">Skipped</button></div>';
+    const RC = todayRecs(ds);
+    if (wl) h += '<div class="row sp hero-act"><span class="pill ' + (wl.status === 'done' ? 'keep' : 'swap') + '">' + esc(wl.status.toUpperCase()) + ' · ' + esc(wl.time) + '</span><button class="txt fit" data-act="wundo">Undo</button></div>';
+    else h += (RC.length ? '<button class="p recb" data-act="recopen">' + ICON(CI.spark) + ' Recommended' + (RC.length > 1 ? ' · ' + RC.length : '') + '</button>' : '') + '<div class="row hero-act' + (RC.length ? ' tight' : '') + '"><button class="g" data-act="wdone">Did it</button><button data-act="wskip">Skipped</button></div>';
     if (ch) h += '<p class="chosen">' + (ch === 'accepted' ? 'Plan adjusted for today' : 'Keeping the original plan') + ' · <button class="txt" data-act="vundo">Change</button></p>';
-    h += '<button class="link-row" data-act="ssheet">View full session<span class="chev">›</span></button>';
+    h += '<button class="link-row" data-act="ssheet">View full session<span class="chev">›</span></button>' + (wl || sessionFor0(ds).p.load === 'Rest' ? '' : '<button class="link-row" data-act="offopen">Take today off<span class="chev">›</span></button>');
   }
   if (w && w.reason) h += '<details class="why"><summary>Why this decision?</summary><p>' + esc(w.reason) + '</p></details>';
   return h + '</section>';
@@ -342,7 +342,7 @@ function viewToday() {
   let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
     '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
   h += syncBanner() + tzBanner() + sickCard() + ramCard() + briefCard() + raceWeekCard() + postRaceCard();
-  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + shortNightCard() + restDayCard() + wrCard() + missedCard() + easeCard() + tipCard();
+  h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + restDayCard() + wrCard() + missedCard() + easeCard() + tipCard();
   const extras = () => foodCheckCard(true) + cutCard() + weeklyCard(true) + monthlyCard(true) + prCelebrate() + sleepCard() + coachCard() + raceCard() + raceDayLink();
   if (!p) return h + extras();
 
@@ -649,7 +649,7 @@ function viewInsights() {
   }).join('') + '</div>';
     h += foodCheckCard(false) + photosSection();
   } else {
-    h += consistencyCard() + thenNowCard() + raceGoalCard() + patternsCard() + realityCard() + rulesCard() + predictCard() + '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
+    h += consistencyCard() + choicesCard() + thenNowCard() + raceGoalCard() + patternsCard() + realityCard() + rulesCard() + predictCard() + '<h2>Streaks</h2>' + streakCard() + badgesCard() + yearCard();
   }
   if (S.failed.length) h += '<h2>Not saved</h2><div class="card">' + S.failed.slice(-5).map((f) => '<div class="small" style="padding:6px 0">' + esc(f.item.table || f.item.action) + ': ' + esc(f.error) + '</div>').join('') + '<button class="sm" style="margin-top:12px" data-act="clearfail">Clear</button></div>';
   return h;
@@ -678,7 +678,7 @@ function viewMore() {
     row({ act: 'cw', ic: I.link, bg: '#111', t: 'WHOOP', s: 'Recovery, strain and sleep · read-only', end: st(d.connected.whoop) }) +
     row({ act: 'cs', ic: I.run, bg: '#fc4c02', t: 'Strava', s: 'Your activities · read-only', end: st(d.connected.strava) }) +
     row({ act: 'reload', ic: I.out, bg: '#64748b', t: 'Reload from sheet', s: 'Use after editing your Google Sheet' }) + '</div>';
-  h += '<h2>Body</h2><div class="card list">' + row({ act: 'body', ic: I.scale, bg: '#14b8a6', t: 'Log weight and waist', s: lastB ? 'Last: ' + esc(lastB.weight) + ' kg on ' + esc(niceDate(lastB.date)) : 'No entries yet' }) + row({ act: 'sickopen', ic: TI.heart, bg: sick() ? '#ff453a' : '#64748b', t: sick() ? 'Illness mode · on' : 'I\'m ill', s: sick() ? 'Tap "I feel better" on Today when you\'re back' : 'Pause training and recover' }) + '</div>' + stockCard();
+  h += '<h2>Body</h2><div class="card list">' + row({ act: 'body', ic: I.scale, bg: '#14b8a6', t: 'Log weight and waist', s: lastB ? 'Last: ' + esc(lastB.weight) + ' kg on ' + esc(niceDate(lastB.date)) : 'No entries yet' }) + row({ act: 'breakopen', ic: B6.moon, bg: '#0ea5e9', t: 'Take a break', s: 'Days off + an easy comeback after' }) + row({ act: 'sickopen', ic: TI.heart, bg: sick() ? '#ff453a' : '#64748b', t: sick() ? 'Illness mode · on' : 'I\'m ill', s: sick() ? 'Tap "I feel better" on Today when you\'re back' : 'Pause training and recover' }) + '</div>' + stockCard();
   h += '<h2>Events</h2><div class="card list">' + d.events.map((e) => {
     const left = e.date ? daysBetween(todayStr(), e.date) : null;
     return row({ act: 'evsheet', data: ' data-n="' + esc(e.name) + '" data-d="' + esc(e.date) + '"', ic: I.flag, bg: '#f59e0b', t: esc(e.name), s: e.date ? esc(niceDate(e.date)) : 'Date not set', end: left === null ? '' : left >= 0 ? '<span class="count">' + left + 'd</span>' : '<span class="mut small">passed</span>' });
