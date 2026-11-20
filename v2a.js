@@ -13,7 +13,7 @@ const V2I = {
 };
 const v2tag = (load) => { const k = { Hard: ['hard', 'HARD'], Moderate: ['mod', 'MODERATE'], Recovery: ['rec', 'EASY'], Rest: ['rest', 'REST'] }[load] || ['mod', String(load || '').toUpperCase()]; return '<span class="v2tag ' + k[0] + '">' + esc(k[1]) + '</span>'; };
 const v2back = (to, label) => '<button class="v2back" data-act="v2go" data-sub="' + (to || '') + '" aria-label="Back to ' + esc(label || 'previous') + '">‹</button>';
-const v2row = (act, title, sub, end, extra) => '<button class="v2li" data-act="' + act + '"' + (extra || '') + '><span class="v2li-t"><b>' + title + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</span><span class="v2li-e">' + (end || '›') + '</span></button>';
+const v2row = (act, title, sub, end, extra, icon, tone) => '<button class="v2li" data-act="' + act + '"' + (extra || '') + '>' + (icon ? gtile(icon, tone) : V2ROWIC[title] ? gtile(V2ROWIC[title][0], V2ROWIC[title][1]) : '') + '<span class="v2li-t"><b>' + title + '</b>' + (sub ? '<span>' + sub + '</span>' : '') + '</span><span class="v2li-e">' + (end || '›') + '</span></button>';
 
 /* ---------- readiness: one 0-100 score from recovery, HRV, sleep, load and soreness ---------- */
 function readiness(ds) {
@@ -47,15 +47,16 @@ function readinessCard(ds, ses) {
   const R = readiness(ds), RST = restInfo(ds, ses), d = d0();
   if (!R) {
     const wait = d.connected.whoop;
-    return '<section class="v2card v2ready"><div class="v2ready-r">' + v2ring(null) + '</div><div class="v2ready-t"><span class="v2tag none">' + (wait ? 'WAITING FOR WHOOP' : 'NO WHOOP') + '</span><b>' + (wait ? 'Train as planned' : 'How do you feel this morning?') + '</b>' +
-      (wait ? '<span class="v2mut">WHOOP scores you after you wake. I check again every 30 min.</span>' : '<div class="v2row3"><button class="v2chip" data-act="feel" data-v="fresh">Fresh</button><button class="v2chip" data-act="feel" data-v="ok">OK</button><button class="v2chip" data-act="feel" data-v="tired">Tired</button></div>') + '</div></section>';
+    return '<section class="v2card v2ready"><div class="v2ready-r">' + v2ring(null) + '</div><div class="v2ready-t"><span class="v2tag none">' + (wait ? 'WAITING FOR WHOOP' : 'NO WHOOP') + '</span><b>' + (wait ? (RST && RST.kind !== 'recovery' ? 'Enjoy your rest' : RST && RST.kind === 'noplan' ? 'No session today' : 'Train as planned') : 'How do you feel this morning?') + '</b>' +
+      (wait ? '<span class="v2mut">' + (RST && RST.kind !== 'recovery' ? 'Rest day. Your score shows after WHOOP has scored your sleep.' : 'WHOOP scores you after you wake. I check again every 30 min.') + '</span>' : '<div class="v2row3"><button class="v2chip" data-act="feel" data-v="fresh">Fresh</button><button class="v2chip" data-act="feel" data-v="ok">OK</button><button class="v2chip" data-act="feel" data-v="tired">Tired</button></div>') + '</div></section>';
   }
   let head;
   if (RST && RST.kind !== 'recovery') head = R.score >= 67 ? 'Enjoy the rest. An easy walk is fine.' : R.score >= 34 ? 'Take it easy today.' : 'Your body needs this. Sleep early tonight.';
   else if (RST && RST.kind === 'recovery') head = 'Easy day, keep it gentle';
   else head = R.kind === 'ready' ? 'Push the top set today' : R.kind === 'light' ? 'Go a bit lighter today' : 'Your body is asking for a day off';
   const word = RST && RST.kind !== 'recovery' ? 'REST DAY' : R.word;
-  return '<section class="v2card v2ready k-' + R.kind + '"><div class="v2ready-r" style="color:var(--v2tx)">' + v2ring(R.score, R.color) + '</div><div class="v2ready-t"><span class="v2tag ' + R.kind + '">' + word + '</span><b>' + esc(head) + '</b><span class="v2mut">' + esc(R.why.join(' · ')) + '</span></div></section>';
+  const wk = [6, 5, 4, 3, 2, 1, 0].map((i) => { const r = i ? readiness(dateAdd(ds, -i)) : R; return r ? r.score : null; });
+  return '<section class="v2card v2ready k-' + R.kind + '"><div class="v2ready-r" style="color:var(--v2tx)">' + v2ring(R.score, R.color) + '</div><div class="v2ready-t"><span class="v2tag ' + R.kind + '">' + word + '</span><b>' + esc(head) + '</b><span class="v2mut">' + esc(R.why.join(' · ')) + '</span>' + (wk.filter((x) => x != null).length >= 3 ? '<span class="v2sparkrow">' + gspark(wk, R.color, 120, 28) + '<span class="v2mut">7 days</span></span>' : '') + '</div></section>';
 }
 
 /* ---------- auto-logging ---------- */
@@ -103,13 +104,29 @@ function persistMeals() {
   }
 }
 
+/* ---------- page header: date row with actions, full-width title, status chips ---------- */
+const shortDate = (ds) => niceDate(ds).replace(/^(\w{3})\w*/, '$1');
+function v2head(kicker, title, sync) {
+  return '<header class="v2head"><div class="v2head-r"><p class="v2lbl">' + esc(kicker) + '</p><span class="v2grow"></span><button class="v2ask" data-act="chatopen" aria-label="Ask the coach">' + V2I.spark + '<span>Coach</span></button>' +
+    (sync ? '<button class="v2icb' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button>' : '') + '</div><h1 class="v2h1">' + esc(title) + '</h1></header>';
+}
+function v2status(ds) {
+  const c = D().cfg, st = c.program_start, chips = [];
+  if (D().plan.length && st && ds < st) chips.push(['plan', 'Plan starts ' + shortDate(st)]);
+  else if (D().plan.length) chips.push(['plan', weekLabel(ds)]);
+  if (S.busy) chips.push(['busy', 'Syncing WHOOP and Strava…']);
+  else if (c.last_sync_error && D().connected.whoop) chips.push(['bad', 'Last sync had a problem']);
+  else { const a = ago(c.last_sync_ok); chips.push(['ok', a === 'never' ? 'Not synced yet' : 'Updated ' + a.replace('today ', '')]); }
+  return '<div class="v2status">' + chips.map(([k, t]) => '<span class="v2st ' + k + '">' + (k === 'plan' ? '' : '<i aria-hidden="true"></i>') + esc(t) + '</span>').join('') + '</div>';
+}
+
 /* ---------- Today ---------- */
 function v2nextUp(ds, p) {
   if (!p) return '';
   const nx = mealView(ds, p).find((x) => x.st === 'todo' && x.m.slot !== 'mg'), W = waterInfo(ds);
   return '<section class="v2card v2list"><div class="v2hd"><span class="v2lbl">Next up</span><button class="v2link" data-act="tab" data-t="meals">Fuel ›</button></div>' +
-    (nx ? '<button class="v2li" data-act="v2meal" data-slot="' + esc(nx.m.slot) + '"><b class="v2time">' + esc(nx.m.time) + '</b><span class="v2li-t"><b>' + esc(nx.m.name) + '</b>' + (nx.m.supps ? '<span>' + esc(nx.m.supps) + ' with it</span>' : '') + '</span><span class="v2li-e">' + esc(nx.m.kcal) + '</span></button>' : '') +
-    '<div class="v2li v2water"><b class="v2time">Water</b><span class="v2li-t"><span class="v2bar"><i style="width:' + Math.min(100, Math.round(100 * W.ml / (W.tgt || 1))) + '%;background:#38BDF8"></i></span><span>' + esc(wFmt(W.ml)) + ' of ' + esc(wFmt(W.tgt)) + (W.heat ? ' · hot day' : '') + '</span></span><button class="v2btn2 sm" data-act="wplus" aria-label="Add a bottle">+ Bottle</button></div></section>';
+    (nx ? '<button class="v2li" data-act="msheet" data-slot="' + esc(nx.m.slot) + '">' + gtile(mealKind(nx.m), 'ok') + '<span class="v2li-t"><span class="v2time2">' + esc(nx.m.time) + '</span><b>' + esc(nx.m.name) + '</b>' + (nx.m.supps ? '<span>' + esc(nx.m.supps) + ' with it</span>' : '') + '</span><span class="v2li-e">' + esc(nx.m.kcal) + '</span></button>' : '') +
+    '<div class="v2li v2water">' + gtile('drop', 'blue') + '<span class="v2li-t"><span class="v2time2">Water</span><span class="v2bar"><i style="width:' + Math.min(100, Math.round(100 * W.ml / (W.tgt || 1))) + '%;background:#38BDF8"></i></span><span>' + esc(wFmt(W.ml)) + ' of ' + esc(wFmt(W.tgt)) + (W.heat ? ' · hot day' : '') + '</span></span><button class="v2btn2 sm" data-act="wplus" aria-label="Add a bottle">+ Bottle</button></div></section>';
 }
 function sessionCard(ds, ses) {
   const p = ses.p, wl = logs('WorkoutLog', ds).find((r) => r.session === ses.name), blocks = parseSession(ses.details).filter((b) => !b.skip);
@@ -117,20 +134,21 @@ function sessionCard(ds, ses) {
   const load = ses.mode === 'swap' ? 'Recovery' : p.load;
   if (wl && wl.status === 'done') {
     const auto = /^auto: Strava/.test(wl.note || ''), a = auto ? stravaMatch(ds, ses) : null, rp = Number(wl.rpe) || 0;
-    return '<section class="v2card v2ses done"><span class="v2tag ready">DONE' + (auto ? ' · FROM STRAVA' : '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2>' +
+    return '<section class="v2card v2ses done"><div class="v2ses-h">' + gtile('check', 'ok') + '<div class="v2grow"><span class="v2tag ready">DONE' + (auto ? ' · FROM STRAVA' : '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2></div></div>' +
       (a ? '<div class="v2stats"><div><b>' + esc(a.distance_km) + ' km</b><span>distance</span></div><div><b>' + (Number(a.distance_km) > 0 ? fmtSec(Math.round(Number(a.moving_min) * 60 / Number(a.distance_km))) : '-') + '</b><span>min per km</span></div><div><b>' + esc(a.avg_hr || '-') + '</b><span>avg HR</span></div></div>' : '<span class="v2mut">Logged ' + esc(wl.time || '') + '</span>') +
       '<b class="v2q">How hard did it feel?</b><div class="v2rpe" role="group" aria-label="Effort from 6 to 10">' + [6, 7, 8, 9, 10].map((v) => '<button class="' + (rp === v ? 'on' : '') + '" aria-pressed="' + (rp === v) + '" data-act="v2rpe" data-v="' + v + '">' + v + '</button>').join('') + '</div><span class="v2mut">6 easy · 8 hard but steady · 10 all out</span>' +
       '<div class="v2row2"><button class="v2btn2" data-act="wundo">' + (auto ? 'Not me, undo' : 'Undo') + '</button><button class="v2btn2" data-act="v2go" data-sub="session" data-d="' + ds + '">See session</button></div></section>';
   }
   if (wl && wl.status === 'skipped') return '<section class="v2card v2ses"><span class="v2tag rest">SKIPPED</span><h2 class="v2h2">' + esc(ses.name) + '</h2><div class="v2row2"><button class="v2btn2" data-act="wundo">Undo</button></div></section>';
-  return '<section class="v2card v2ses"><div class="v2ses-h"><div><span class="v2lbl">Today\'s session · ' + esc(p.time || '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2><span class="v2mut">' + (mins ? 'About ' + mins + ' min · ' : '') + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + (ses.injured ? ' · ' + ses.injured + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) : '') + '</span></div>' + v2tag(load) + '</div>' +
+  const K = sesKind(ses.name, load);
+  return '<section class="v2card v2ses"><div class="v2ses-h">' + gtile(K[0], K[1]) + '<div class="v2grow"><span class="v2lbl">Today\'s session · ' + esc(p.time || '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2><span class="v2mut">' + (mins ? 'About ' + mins + ' min · ' : '') + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + (ses.injured ? ' · ' + ses.injured + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) : '') + '</span></div>' + v2tag(load) + '</div>' +
     '<div class="v2row2"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="v2change">Change</button></div>' +
     '<button class="v2link" data-act="v2go" data-sub="session" data-d="' + ds + '">See all exercises and reels ›</button></section>';
 }
 function proposalCard(ds) {
   const R = todayRecs(ds); if (!R.length) return '';
   const r = R[0];
-  return '<section class="v2card v2prop"><span class="v2lbl">Waiting for you · nothing changes until you choose</span><h2 class="v2h2">' + esc(r.title) + '</h2><span class="v2mut">' + esc(String(r.why || '').slice(0, 220)) + '</span>' +
+  return '<section class="v2card v2prop"><div class="v2ses-h">' + gtile('spark', 'vio') + '<div class="v2grow"><span class="v2lbl">Waiting for you · nothing changes until you choose</span><h2 class="v2h2">' + esc(r.title) + '</h2></div></div><span class="v2mut">' + esc(String(r.why || '').slice(0, 220)) + '</span>' +
     (r.prev ? '<details class="v2prev"><summary>See the new session</summary>' + blocksHTML(r.prev, 'rec-' + r.id) + '</details>' : '') +
     '<div class="v2row2"><button class="v2btn" data-act="' + (r.acc || 'recacc') + '" data-id="' + r.id + '" data-t="' + esc(r.title) + '" style="flex:1">Accept</button><button class="v2btn2" data-act="' + (r.rej || 'recrej') + '" data-id="' + r.id + '" data-t="' + esc(r.title) + '" style="flex:1">Keep original</button></div>' +
     (R.length > 1 ? '<button class="v2link" data-act="recopen">' + (R.length - 1) + ' more suggestion' + (R.length > 2 ? 's' : '') + ' ›</button>' : '') + '</section>';
@@ -139,7 +157,7 @@ function restCard(ds, ses, RST) {
   let bar = '';
   const m = RST.kind === 'break' && String(RST.label).match(/day (\d+) of (\d+)/);
   if (m) { const a = Number(m[1]), n = Number(m[2]); bar = '<div class="v2seg" role="img" aria-label="Break day ' + a + ' of ' + n + '">' + Array.from({ length: n }, (_, i) => '<i class="' + (i + 1 < a ? 'p' : i + 1 === a ? 'n' : '') + '"></i>').join('') + '</div>'; }
-  return '<section class="v2card">' + bar + '<span class="v2tag rest">' + esc(String(RST.label || 'Rest day').toUpperCase()) + '</span><h2 class="v2h2">' + esc(ses ? ses.name : 'Rest day') + '</h2>' +
+  return '<section class="v2card">' + GILL.night + bar + '<span class="v2tag rest">' + esc(String(RST.label || 'Rest day').toUpperCase()) + '</span><h2 class="v2h2">' + esc(ses ? ses.name : 'Rest day') + '</h2>' +
     '<span class="v2mut">' + esc(ses && ses.p.details ? String(ses.p.details).split('\n').filter((l) => /^\s*-/.test(l)).map((l) => l.replace(/^\s*-\s*/, '')).slice(0, 2).join(' · ') : 'Walk, stretch, sleep well.') + '</span>' +
     (RST.ov ? '<button class="v2btn2 wide" data-act="restcancel">Train today instead</button>' : '') + '</section>';
 }
@@ -154,19 +172,18 @@ function v2setup() {
   const d = d0(), c = d.connected, steps = [['Google Sheet', true, 'Your plan and meals are in', ''], ['WHOOP', c.whoop, 'Readiness every morning, no typing', 'cw'], ['Strava', c.strava, 'Runs and workouts logged for you', 'cs'], ['Google Calendar', !!D().calOk, 'Sessions move around meetings', 'v2calhelp']];
   const n = steps.filter((s) => s[1]).length; if ((n >= 3 && D().plan.length && c.whoop) || LS.getItem('setup-x')) return '';
   return '<section class="v2card v2list"><div class="v2hd"><span class="v2lbl">Set up Apex · ' + n + ' of 4</span></div><div class="v2bar"><i style="width:' + n * 25 + '%;background:#4ADE9B"></i></div>' +
-    steps.map(([t, ok, s, a]) => '<div class="v2li"><span class="v2ck' + (ok ? ' ok' : '') + '" aria-hidden="true">' + (ok ? '✓' : '') + '</span><span class="v2li-t"><b>' + t + '</b><span>' + s + '</span></span>' + (ok ? '' : '<button class="v2btn2 sm" data-act="' + a + '">Connect</button>') + '</div>').join('') +
+    steps.map(([t, ok, s, a], i) => '<div class="v2li">' + gtile(['book', 'heart', 'run', 'cal'][i], ok ? 'ok' : 'mut') + '<span class="v2li-t"><b>' + t + '</b><span>' + s + '</span></span>' + (ok ? '' : '<button class="v2btn2 sm" data-act="' + a + '">Connect</button>') + '</div>').join('') +
     '<button class="v2link" data-act="v2setupx">Hide this</button></section>';
 }
 function viewToday2() {
   const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), RST = restInfo(ds, ses), p = dayPlan(ds), hr = local().hour;
-  let h = '<header class="v2top"><div><p class="v2lbl">' + esc(niceDate(ds)) + (D().plan.length ? ' · ' + esc(weekLabel(ds)) : '') + '</p><h1 class="v2h1">' + greeting() + (c.name ? ', ' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
-    '<div class="v2top-r"><button class="v2ask" data-act="chatopen" aria-label="Ask the coach">' + V2I.spark + 'Coach</button><button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></div></header>';
+  let h = v2head(shortDate(ds), greeting() + (c.name ? ', ' + c.name : ''), true) + v2status(ds);
   h += syncBanner() + tzBanner() + v2setup() + sickCard() + ramCard() + raceWeekCard() + postRaceCard() + v2heatCard(ds);
   h += readinessCard(ds, ses);
-  if (RST && RST.kind === 'noplan') h += '<section class="v2card"><span class="v2tag none">NO PROGRAM YET</span><h2 class="v2h2">Nothing planned</h2><span class="v2mut">Tell Apex your goals and which days you can train. It builds your weeks from your documents and saved reels.</span><button class="v2btn wide" data-act="wizopen">Create my program</button></section>';
+  if (RST && RST.kind === 'noplan') h += '<section class="v2card">' + GILL.plan + '<span class="v2tag none">NO PROGRAM YET</span><h2 class="v2h2">Nothing planned</h2><span class="v2mut">Tell Apex your goals and which days you can train. It builds your weeks from your documents and saved reels.</span><button class="v2btn wide" data-act="wizopen">Create my program</button></section>';
   else if (RST && RST.kind !== 'recovery') h += restCard(ds, ses, RST) + restDayCard();
   else if (ses) h += proposalCard(ds) + v2calConflict(ds, ses) + sessionCard(ds, ses);
-  if (hr >= 20 && !LS.getItem('wrap-' + ds)) h += '<button class="v2card v2flat v2cta" data-act="v2wrap"><span class="v2ic">' + V2I.spark + '</span><span class="v2grow"><b>Wrap up your day</b><span class="v2mut">About 10 seconds: meals, how you feel, anything sore.</span></span><span class="v2li-e">›</span></button>';
+  if (hr >= 20 && !LS.getItem('wrap-' + ds)) h += '<button class="v2card v2flat v2cta" data-act="v2wrap">' + gtile('moon', 'vio') + '<span class="v2grow"><b>Wrap up your day</b><span class="v2mut">About 10 seconds: meals, how you feel, anything sore.</span></span><span class="v2li-e">›</span></button>';
   h += v2nextUp(ds, p) + missedCard() + easeCard() + wrCard() + raceDayLink() + prCelebrate() + coachCard() + raceCard();
   return h;
 }
@@ -220,7 +237,7 @@ function liveHTML() {
   const blocks = [...new Set(L.list.map((x) => x.block))].length, bi = [...new Set(L.list.slice(0, L.i + 1).map((x) => x.block))].length, nx = L.list[L.i + 1];
   const el = Math.floor((Date.now() - L.t0) / 60000);
   return '<div class="v2live-h"><button class="v2btn2 sm" data-act="v2liveend">End</button><span class="v2time">' + el + ' min</span><span class="v2mut">Block ' + bi + ' of ' + blocks + '</span></div>' +
-    '<p class="v2lbl">Exercise ' + (L.i + 1) + ' of ' + L.list.length + ' · ' + esc(X.head) + '</p><h1 class="v2h1">' + esc(X.name) + '</h1>' +
+    '<div class="v2ses-h v2stack">' + gtile(sesKind(X.name + ' ' + L.ses)[0], 'vio') + '<div class="v2grow"><p class="v2lbl">Exercise ' + (L.i + 1) + ' of ' + L.list.length + ' · ' + esc(X.head) + '</p><h1 class="v2h1">' + esc(X.name) + '</h1></div></div>' +
     '<div class="v2dots" role="img" aria-label="Set ' + L.set + ' of ' + X.sets + '">' + Array.from({ length: X.sets }, (_, i) => '<i class="' + (i + 1 < L.set ? 'p' : i + 1 === L.set ? 'n' : '') + '"></i>').join('') + '</div>' +
     '<p class="v2mut">Set ' + L.set + ' of ' + X.sets + (last ? ' · last time ' + esc(last) : '') + ' · ' + esc(sug.why) + '</p>' +
     '<div class="v2step2"><div><span class="v2lbl">kg</span><b>' + (L.kg === '' ? '–' : L.kg) + '</b><div><button data-act="v2lv" data-k="kg" data-v="-2.5" aria-label="Less weight">−</button><button data-act="v2lv" data-k="kg" data-v="2.5" aria-label="More weight">+</button></div></div>' +

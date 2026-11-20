@@ -177,3 +177,73 @@ h1.v2h1{font-size:1.75rem}
 .v2top>div:first-child{flex:1;min-width:0}
 .v2top-r{flex-wrap:nowrap;flex:none}
 .v2top .sync-ic{position:static;flex:none}
+
+/* header: date row with actions, full-width title, status chips */
+.v2head{margin:0 0 var(--s2)}
+.v2head-r{display:flex;align-items:center;gap:var(--s2);min-height:44px}
+.v2head-r .v2lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.v2head .v2h1{font-size:1.6rem;margin:var(--s2) 0 0}
+.v2icb{width:44px;height:44px;flex:none;border-radius:50%;border:0;background:var(--card);color:var(--v2vio);display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:600;cursor:pointer;box-shadow:var(--shadow)}
+.v2icb svg{width:20px;height:20px}
+.v2icb.busy svg{animation:spin 1s linear infinite}
+.v2status{display:flex;flex-wrap:wrap;gap:6px;margin:var(--s2) 0 var(--s4)}
+.v2st{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border-radius:999px;background:var(--card);font-size:.75rem;font-weight:600;color:var(--v2mut)}
+.v2st i{width:7px;height:7px;border-radius:50%;background:var(--v2ok)}
+.v2st.plan{color:var(--v2vio);background:var(--v2vioT)}
+.v2st.busy i{background:var(--v2vio);animation:pulse 1.2s ease-in-out infinite}
+.v2st.bad{color:var(--v2bad)}.v2st.bad i{background:var(--v2bad)}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.v2st.busy i,.v2icb.busy svg{animation:none}}
+/* plan */
+.v2block{gap:var(--s3)}
+.v2kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s3)}
+.v2kpis div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.v2kpis b{font-size:1.1rem;font-variant-numeric:tabular-nums}
+.v2wknav{display:flex;align-items:center;gap:var(--s2);padding-bottom:var(--s2)}
+.v2wknav .v2icb{background:var(--v2card2);box-shadow:none}
+.v2wkt{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;text-align:center}
+.v2wkt span{color:var(--v2mut);font-size:.78rem}
+.v2list>.v2wknav+.v2day{border-top:0}
+.v2day.pre .v2li-t b,.v2day.pre .v2dn b{color:var(--v2mut);font-weight:500}
+.v2day.brk .v2dn b{font-size:.95rem}
+.v2icb svg{width:22px!important;height:22px!important}
+.v2icb svg{flex:none;min-width:22px}
+
+/* ---------- graphics ---------- */
+.gi{width:22px;height:22px;flex:none}
+.gtile{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
+.gtile .gi{width:22px;height:22px}
+.t-vio{background:var(--v2vioT);color:var(--v2vio)}
+.t-ok{background:var(--v2okT);color:var(--v2ok)}
+.t-warm{background:var(--v2warnT);color:var(--v2warn)}
+.t-bad{background:var(--v2badT);color:var(--v2bad)}
+.t-blue{background:rgba(56,189,248,.14);color:#38BDF8}
+.t-mut{background:var(--v2card2);color:var(--v2mut)}
+.v2card .t-mut{background:rgba(127,127,140,.14)}
+@media (prefers-color-scheme:light){.t-blue{color:#0369a1;background:rgba(3,105,161,.10)}}
+.v2ses-h{display:flex;align-items:flex-start;gap:var(--s3)}
+.v2ses-h .gtile{margin-top:2px}
+.v2ses-h .v2grow .v2h2,.v2ses-h .v2grow .v2h1{margin-bottom:0}
+.v2prop .v2ses-h .v2lbl{color:var(--v2vio)}
+.v2time2{font-size:.75rem;font-weight:700;color:var(--v2mut);font-variant-numeric:tabular-nums}
+.v2meal .v2li-t b{font-size:.98rem}
+.v2day .gtile{width:36px;height:36px;border-radius:10px}
+.v2day .gtile .gi{width:20px;height:20px}
+.v2sparkrow{display:flex;align-items:center;gap:8px;margin-top:4px}
+.gspark{display:block}
+.v2mac{display:flex;align-items:center;gap:var(--s3);min-width:0}
+.v2mac>div{display:flex;flex-direction:column;min-width:0}
+.v2mac svg{flex:none;color:var(--v2tx)}
+.gbottle{flex:none;color:var(--v2tx)}
+.groute{display:block;margin:-2px 0 2px}
+.gill{display:block;margin:-4px 0 6px}
+.gill.sm{width:120px;height:90px;align-self:center;margin:4px auto 8px}
+.v2race-card{position:relative;padding-right:64px}
+.v2race-card>.gtile{position:absolute;right:var(--s4);top:var(--s4)}
+.v2stat .gtr{width:18px;height:18px;color:var(--v2warn);margin-bottom:2px}
+.v2tool .gtile{margin-bottom:6px;width:36px;height:36px}
+.v2cta .gtile,.v2flat>.gtile{flex:none}
+.v2cta svg[role=img]{flex:none;color:var(--v2tx)}
+.v2ses-h.v2stack{flex-direction:column;gap:var(--s2)}
+.v2ses-h.v2stack .v2grow{width:100%}
+.v2ses-h.v2stack .v2h1{margin-left:0}
