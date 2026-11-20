@@ -110,7 +110,7 @@ function suppCard(p) {
   return '<h2>Supplements · ' + n + ' of ' + L.length + '</h2><div class="supp" role="group" aria-label="Supplements taken today">' + L.map((x) => { const on = got.indexOf(x.name) >= 0; return '<button class="chip' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-act="supp" data-n="' + esc(x.name) + '">' + (on ? '✓ ' : '') + esc(x.name) + '<small>' + esc(x.time) + '</small></button>'; }).join('') + '</div>';
 }
 function autoSupps(slot) {
-  const p = planFor(todayStr()); if (!p) return; const got = suppsTaken(todayStr());
+  const p = dayPlan(todayStr()); if (!p) return; const got = suppsTaken(todayStr());
   suppList(p.daytype).filter((x) => x.slot === slot && got.indexOf(x.name) < 0).forEach((x) => send({ action: 'log', table: 'Supps', row: { date: todayStr(), name: x.name, time: nowTime() } }));
 }
 

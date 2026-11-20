@@ -1,5 +1,5 @@
 // Caches the app shell so it opens offline. API calls (script.google.com) always go to the network.
-const V = 'apex-v24';
+const V = 'apex-v27';
 const SHELL = ['./', './index.html', './style.css', './coach.js', './train.js', './life.js', './batch4.js', './batch5.js', './batch6.js', './batch7.js', './batch8.js', './batch9.js', './reels.json', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {

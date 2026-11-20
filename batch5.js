@@ -30,7 +30,7 @@ function weekScore(sunDs) {
     const ds = dateAdd(sunDs, i); if (ds > t) break; days++;
     const s = sessionFor0(ds), done = (Hh.workouts || []).some((w) => w.date === ds && w.status === 'done') || D().strava.some((a) => a.date === ds);
     if (s && s.p.load !== 'Rest' && s.p.load !== 'Recovery') { pl++; if (done) dn++; }
-    const p = planFor(ds); if (p) mealsFor(p.daytype).filter((m) => Number(m.kcal) > 0).forEach((m) => { mp++; if ((Hh.meals || []).some((r) => r.date === ds && r.slot === m.slot && (r.status === 'ate' || r.status === 'swap'))) me++; });
+    const p = dayPlan(ds); if (p) mealsFor(p.daytype).filter((m) => Number(m.kcal) > 0).forEach((m) => { mp++; if ((Hh.meals || []).some((r) => r.date === ds && r.slot === m.slot && (r.status === 'ate' || r.status === 'swap'))) me++; });
     const wl = (Hh.water || []).find((w) => w.date === ds), tg = weekdayOf(ds) === 6 ? Number(D().cfg.water_target_rest) || 3500 : Number(D().cfg.water_target_train) || 4500;
     if (wl && Number(wl.ml) >= tg) wHit++;
     const w = Hh.whoop.find((x) => x.date === ds); if (w && Number(w.sleep_hours)) sl.push(Number(w.sleep_hours));
@@ -56,7 +56,7 @@ function patterns() {
   const logDays = [...new Set((Hh.meals || []).map((r) => r.date))].filter((d) => d < t && d >= dateAdd(t, -56));
   if (logDays.length >= 8) {
     const miss = {};
-    logDays.forEach((ds) => { const p = planFor(ds); if (!p) return; mealsFor(p.daytype).filter((m) => Number(m.kcal) > 0).forEach((m) => { const k = weekdayOf(ds) + '|' + m.name; const r = (Hh.meals || []).find((x) => x.date === ds && x.slot === m.slot); const o = miss[k] = miss[k] || { n: 0, m: 0 }; o.n++; if (!r || r.status === 'skipped') o.m++; }); });
+    logDays.forEach((ds) => { const p = dayPlan(ds); if (!p) return; mealsFor(p.daytype).filter((m) => Number(m.kcal) > 0).forEach((m) => { const k = weekdayOf(ds) + '|' + m.name; const r = (Hh.meals || []).find((x) => x.date === ds && x.slot === m.slot); const o = miss[k] = miss[k] || { n: 0, m: 0 }; o.n++; if (!r || r.status === 'skipped') o.m++; }); });
     const worst = Object.keys(miss).map((k) => Object.assign({ k }, miss[k])).filter((x) => x.n >= 3 && x.m / x.n >= 0.5).sort((a, b) => b.m / b.n - a.m / a.n)[0];
     if (worst) { const [d, n] = worst.k.split('|'); out.push({ w: worst.m / worst.n, t: 'You miss <b>' + esc(n) + '</b> on ' + worst.m + ' of ' + worst.n + ' ' + DN[d] + 's.', fix: 'Move it to a time that fits ' + DN[d] + 's, or swap it for something quicker.' }); }
   }
@@ -91,7 +91,7 @@ function planReality() {
   for (let i = 1; i <= 28; i++) {
     const ds = dateAdd(t, -i), s = sessionFor0(ds);
     if (s && s.p.load !== 'Rest' && s.p.load !== 'Recovery') { const o = S0[s.p.session] = S0[s.p.session] || { n: 0, d: 0, s: 0, mv: 0 }; o.n++; const w = (Hh.workouts || []).find((x) => x.date === ds); if (w && w.status === 'done' || didTrain(ds)) o.d++; else if (w && w.status === 'skipped') o.s++; if ((Hh.overrides || []).some((x) => x.date === ds && /moved|short|superset|plan b|deload|ease|night/.test(x.reason || ''))) o.mv++; }
-    const p = planFor(ds); if (p) mealsFor(p.daytype).filter((m) => Number(m.kcal) > 0).forEach((m) => { const o = M0[m.name] = M0[m.name] || { n: 0, a: 0, sw: 0, sk: 0 }; o.n++; const r = (Hh.meals || []).find((x) => x.date === ds && x.slot === m.slot); if (r && r.status === 'ate') o.a++; else if (r && r.status === 'swap') o.sw++; else if (r && r.status === 'skipped') o.sk++; });
+    const p = dayPlan(ds); if (p) mealsFor(p.daytype).filter((m) => Number(m.kcal) > 0).forEach((m) => { const o = M0[m.name] = M0[m.name] || { n: 0, a: 0, sw: 0, sk: 0 }; o.n++; const r = (Hh.meals || []).find((x) => x.date === ds && x.slot === m.slot); if (r && r.status === 'ate') o.a++; else if (r && r.status === 'swap') o.sw++; else if (r && r.status === 'skipped') o.sk++; });
   }
   return { S0, M0 };
 }
@@ -195,12 +195,13 @@ function stackNudge(anchor) {
 /* ======================= 92. morning briefing ======================= */
 function briefCard() {
   const h = local().hour; if (h < 4 || h >= 12 || LS.getItem('brief-' + todayStr())) return '';
-  const ds = todayStr(), ses = sessionFor(ds), w = whoopFor(ds), p = planFor(ds), first = p ? mealsFor(p.daytype).find((m) => Number(m.kcal) > 0 && !logs('MealLog', ds).some((r) => r.slot === m.slot)) : null;
+  const ds = todayStr(), ses = sessionFor(ds), w = whoopFor(ds), p = ses ? ses.p : planFor(ds), first = p ? mealsFor(p.daytype).find((m) => Number(m.kcal) > 0 && !logs('MealLog', ds).some((r) => r.slot === m.slot)) : null;
   const rule = rulesList().filter((r) => r.status === 'on'), focus = rule.length ? rule[new Date(ds).getDate() % rule.length].text : 'Protein at every meal and water before 14:00.';
-  const rec = w && Number(w.recovery) ? Number(w.recovery) : null;
+  const rec = w && Number(w.recovery) ? Number(w.recovery) : null, RST = restInfo(ds, ses), off = RST && RST.kind !== 'recovery';
+  const body = rec == null ? '' : off ? (rec < 34 ? ' · sleep early tonight' : rec < 67 ? ' · take it easy' : ' · enjoy the rest') : RST ? ' · keep it easy' : (rec < 34 ? ' · take it easy' : rec < 67 ? ' · go a bit lighter' : ' · good to push');
   return '<section class="card brief"><div class="row sp"><span class="eyebrow3">' + ICON(B5.sun) + ' Your morning briefing</span><button class="txt fit" data-act="briefx" aria-label="Hide the briefing for today">Hide</button></div>' +
-    '<ul class="bl"><li><b>Train</b>' + (ses && ses.p.load !== 'Rest' ? esc(ses.name) + ' at ' + esc(ses.p.time) + ' (' + esc(ses.p.load.toLowerCase()) + ')' : 'Rest day') + '</li>' +
-    '<li><b>Body</b>' + (rec != null ? 'Recovery ' + rec + '%' + (w.sleep_hours ? ', ' + esc(w.sleep_hours) + ' h sleep' : '') + (rec < 34 ? ' · take it easy' : rec < 67 ? ' · go a bit lighter' : ' · good to push') : 'WHOOP score not in yet') + '</li>' +
+    '<ul class="bl"><li><b>Train</b>' + (RST && RST.kind === 'noplan' ? 'No program yet' : !off ? esc(ses.name) + ' at ' + esc(ses.p.time) + ' (' + esc(ses.p.load.toLowerCase()) + ')' : RST.kind === 'break' ? esc(RST.label.replace('Break · d', 'Break day, d')) : 'Rest day') + '</li>' +
+    '<li><b>Body</b>' + (rec != null ? 'Recovery ' + rec + '%' + (w.sleep_hours ? ', ' + esc(w.sleep_hours) + ' h sleep' : '') + body : 'WHOOP score not in yet') + '</li>' +
     (first ? '<li><b>Eat</b>' + esc(first.name) + ' at ' + esc(first.time) + '</li>' : '') + '<li><b>Focus</b>' + esc(focus) + '</li></ul></section>';
 }
 
@@ -385,7 +386,7 @@ Object.assign(COACH_ACTS, {
     S.altBusy = false; closeSheets(); render();
   },
   alteat: (el) => {
-    const p = planFor(todayStr()), a = (D().mealalts || []).find((x) => x.daytype === p.daytype && x.slot === el.dataset.slot && String(x.idx) === el.dataset.i); if (!a) return;
+    const p = dayPlan(todayStr()), a = (D().mealalts || []).find((x) => x.daytype === p.daytype && x.slot === el.dataset.slot && String(x.idx) === el.dataset.i); if (!a) return;
     send({ action: 'log', table: 'MealLog', row: { date: todayStr(), slot: el.dataset.slot, status: 'swap', time: nowTime(), note: 'Alternative: ' + a.name + ' (' + a.items + ') ' + a.kcal + ' kcal', extra_name: '', kcal: String(a.kcal), protein: String(a.protein || '') } });
     closeSheets(); toast('Logged ' + a.name);
   },

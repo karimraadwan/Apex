@@ -30,8 +30,8 @@ function comeback(p, level) {
   if (/run|jog|tempo|interval/i.test(p.session)) {
     const f = level === 'deload' ? 0.5 : 0.75;
     const km = (t) => t.replace(/(\d+(?:\.\d+)?)\s*km\b/g, (m, k) => Math.max(3, Math.round(Number(k) * f)) + ' km');
-    L.details = L.details.split('\n').map((l) => km(l).replace(/race effort: HR 150-155[^,\n]*/gi, 'easy, HR under 150').replace(/race rehearsal/gi, 'easy')).join('\n');
-    L.session = km(p.session).replace(/:?\s*race rehearsal/i, '') + (level === 'deload' ? ' (comeback)' : ' (easing in)');
+    L.details = L.details.split('\n').map((l) => km(l).replace(/race effort: HR 150-155[^,\n]*/gi, 'easy, HR under 150').replace(/race rehearsal/gi, 'easy').replace(/at race pace[^,\n]*/gi, 'at easy pace, HR under 150')).join('\n');
+    L.session = km(p.session).replace(/:?\s*race rehearsal/i, '').replace(/race[- ]pace run/i, 'easy run').replace(/\b(tempo|interval)s? run/i, 'easy run') + (level === 'deload' ? ' (comeback)' : ' (easing in)');
   } else L.session = p.session + (level === 'deload' ? ' (comeback)' : ' (easing in)');
   L.details = L.details.replace(/Deload week: about 60-70%[^\n]*|Easing back in: about 80%[^\n]*/, level === 'deload' ? 'Comeback: about 60% of your usual weights, half the sets, runs shorter and easy. You should finish feeling you could do more.' : 'Comeback week 2: about 80% of your weights, runs 75% of the distance.');
   return L;
@@ -44,7 +44,7 @@ function todayRecs(ds) {
   if (D().overrides.some((o) => o.date === ds)) return out;
   const hid = (id) => LS.getItem('recx-' + ds + id);
   const v = w && /^(reduce|swap)$/.test(w.verdict) ? w.verdict : null;
-  if (v && !ch) out.push({ id: 'whoop', title: v === 'swap' ? 'Swap to Active Recovery today' : 'Do it, but lighter', why: 'WHOOP recovery ' + w.recovery + '%. ' + (w.reason || ''), acc: 'vacc', rej: 'vrej' });
+  if (v && !ch && s0.p.load !== 'Recovery') out.push({ id: 'whoop', title: v === 'swap' ? 'Swap to Active Recovery today' : 'Do it, but lighter', why: 'WHOOP recovery ' + w.recovery + '%. ' + (w.reason || ''), acc: 'vacc', rej: 'vrej' });
   const sh = w && Number(w.sleep_hours);
   if (sh && sh < 6 && s0.p.load === 'Hard' && !LS.getItem('night-' + ds)) out.push({ id: 'night', title: 'Lighter session after a short night', why: 'You slept ' + w.sleep_hours + ' h. Hard training on under 6 h raises injury risk and gives less back.', acc: 'nightacc', rej: 'nightrej', prev: lowEnergy(s0) });
   const rec = w && Number(w.recovery), lb = loadBalance();
@@ -84,11 +84,14 @@ function offBody() {
 /* ======================= break + comeback ======================= */
 const BRWHY = [['holiday', 'Holiday'], ['travel', 'Travel'], ['busy', 'Busy period'], ['ill', 'Illness'], ['injury', 'Injury'], ['tired', 'Burned out']];
 function breakPlan(B) {
-  const n = Math.max(1, Math.min(28, daysBetween(B.from, B.to) + 1)), end = B.to, ph = n <= 3 ? [[2, 'ease']] : n <= 7 ? [[3, 'deload'], [4, 'ease']] : n <= 14 ? [[7, 'deload'], [7, 'ease']] : [[7, 'deload'], [7, 'deload'], [7, 'ease']];
+  const n = Math.max(1, Math.min(28, daysBetween(B.from, B.to) + 1)), end = dateAdd(B.from, n - 1), ph = n <= 3 ? [[2, 'ease']] : n <= 7 ? [[3, 'deload'], [4, 'ease']] : n <= 14 ? [[7, 'deload'], [7, 'ease']] : [[7, 'deload'], [7, 'deload'], [7, 'ease']];
   const shift = B.mode === 'pause' && n >= 5 ? Math.max(1, Math.round(n / 7)) * 7 : 0, back = [];
   let d = dateAdd(end, 1) > todayStr() ? dateAdd(end, 1) : todayStr();
   ph.forEach(([days, lv]) => { for (let i = 0; i < days; i++, d = dateAdd(d, 1)) back.push([d, lv]); });
-  return { n, end, shift, back };
+  // race week and the days right after a race keep their own plan (taper / post race), never a comeback session
+  const evs = (D().events || []).filter((e) => e.date && e.date >= B.from), near = (x) => evs.some((e) => x >= dateAdd(e.date, -6) && x <= dateAdd(e.date, 2));
+  const raceIn = evs.filter((e) => e.date <= end);
+  return { n, end, shift, back: back.filter(([x]) => !near(x)), raceIn };
 }
 function breakSes(ds, shift) {
   if (!shift) return sessionFor0(ds);
@@ -102,6 +105,7 @@ function breakBody() {
   return '<p class="mut small">Rest days, then a comeback that builds you back up so you don’t start too heavy.</p>' +
     '<div class="row two"><div><label class="mut small" for="brf">From</label><input type="date" id="brf" min="' + dateAdd(todayStr(), -30) + '" value="' + esc(B.from) + '"></div><div><label class="mut small" for="brt">To</label><input type="date" id="brt" min="' + esc(B.from) + '" max="' + dateAdd(B.from, 27) + '" value="' + esc(B.to) + '"></div></div>' +
     '<p class="mut small">' + P.n + ' day' + (P.n > 1 ? 's' : '') + ' off' + (B.from < todayStr() ? ' · past days are saved as rest, the comeback starts ' + (P.back.length ? esc(niceDate(P.back[0][0])) : 'now') : '') + '. Up to 28 days, back to 30 days ago.</p>' +
+    (P.raceIn.length ? '<p class="warnline">⚠ ' + esc(P.raceIn.map((e) => e.name + ' (' + niceDate(e.date) + ')').join(', ')) + ' is inside this break. Race days stay as planned.</p>' : '') +
     '<p class="lbl">Why?</p><div class="chiprow">' + BRWHY.map(([k, l]) => '<button class="chip' + (B.why === k ? ' on' : '') + '" aria-pressed="' + (B.why === k) + '" data-act="brwhy" data-k="' + k + '">' + l + '</button>').join('') + '</div>' +
     (P.n >= 5 ? '<p class="lbl">Your program</p><div class="segc" role="group" aria-label="Program"><button class="' + (B.mode === 'keep' ? 'on' : '') + '" aria-pressed="' + (B.mode === 'keep') + '" data-act="brmode" data-k="keep">Keep the dates</button><button class="' + (B.mode === 'pause' ? 'on' : '') + '" aria-pressed="' + (B.mode === 'pause') + '" data-act="brmode" data-k="pause">Pause it</button></div><p class="mut small">' + (B.mode === 'pause' ? 'You continue where you stopped: the program moves ' + P.shift / 7 + ' week' + (P.shift > 7 ? 's' : '') + ' later.' : 'Missed sessions are skipped and you rejoin the calendar.') + (raceSoon ? ' ' + esc(ev.name) + ' is in ' + daysBetween(todayStr(), ev.date) + ' days, so keeping the dates is safer.' : '') + '</p>' : '') +
     '<p class="lbl">During the break</p><p class="small">' + esc(dur) + '</p>' +
@@ -149,6 +153,14 @@ Object.assign(COACH_ACTS, {
     decide('rest day', s0 ? s0.p.session : '', O.move === 'move' ? 'moved' : 'accepted', O.why);
     closeSheets(); toast(O.move === 'move' ? 'Rest today. ' + s0.p.session + ' moved to ' + niceDate(free) + '.' : 'Rest today. Enjoy it.', 3500);
   },
+  restcancel: () => {
+    const ds = todayStr(), o = D().overrides.find((x) => x.date === ds); if (!o) return;
+    const br = /^break/.test(o.reason || '');
+    if (!confirm(br ? 'Train today instead? Today comes off your break. The rest of the break stays.' : 'Train today instead? Your planned session comes back.')) return;
+    send({ action: 'del', table: 'Overrides', row: { date: ds } });
+    if (/^rest day/.test(o.reason || '')) D().overrides.filter((x) => x.reason === 'moved from rest day' && x.date > ds && x.session === (planFor(ds) || {}).session).slice(0, 1).forEach((x) => send({ action: 'del', table: 'Overrides', row: { date: x.date } }));
+    decide(br ? 'break' : 'rest day', 'trained instead', 'rejected', ''); toast('Back on: ' + ((planFor(ds) || {}).session || 'today’s plan') + '.', 3000);
+  },
   breakopen: () => { const ev = nextRace(); S.brk = { from: todayStr(), to: dateAdd(todayStr(), 6), why: '', mode: ev && daysBetween(todayStr(), ev.date) <= 42 ? 'keep' : 'pause' }; infoSheet('Plan a break', breakBody(), 'brk'); },
   brwhy: (el) => { S.brk.why = el.dataset.k; keepScroll('brk', breakBody()); },
   brmode: (el) => { S.brk.mode = el.dataset.k; keepScroll('brk', breakBody()); },
@@ -156,7 +168,7 @@ Object.assign(COACH_ACTS, {
     const B = S.brk, P = breakPlan(B); if (!B.why) return;
     if (!confirm(P.n + ' days off, ' + niceDate(B.from) + ' to ' + niceDate(P.end) + ', then a ' + P.back.length + '-day comeback. OK?')) return;
     if (P.shift) setCfg('program_start', dateAdd(D().cfg.program_start, P.shift));
-    for (let i = 0; i < P.n; i++) { const ds = dateAdd(B.from, i); if (logs('WorkoutLog', ds).some((x) => x.status === 'done')) continue; send({ action: 'log', table: 'Overrides', row: { date: ds, session: 'Break: rest', load: 'Rest', time: '09:00', daytype: 'sat', details: '# Break day\n- Walk 20-40 min if you feel like it\n- Sleep, water, protein', reason: 'break: ' + B.why } }); }
+    for (let i = 0; i < P.n; i++) { const ds = dateAdd(B.from, i); if (logs('WorkoutLog', ds).some((x) => x.status === 'done') || P.raceIn.some((e) => e.date === ds)) continue; send({ action: 'log', table: 'Overrides', row: { date: ds, session: 'Break: rest', load: 'Rest', time: '09:00', daytype: 'sat', details: '# Break day\n- Walk 20-40 min if you feel like it\n- Sleep, water, protein', reason: 'break: ' + B.why } }); }
     let n = 0; P.back.forEach(([ds, lv]) => { const s = sessionFor0(ds), L = s && comeback(s.p, lv); if (L) { send({ action: 'log', table: 'Overrides', row: Object.assign({ date: ds, reason: 'comeback' }, L) }); n++; } });
     decide('break', P.n + ' days, ' + B.from + ' to ' + P.end + (P.shift ? ', program paused' : ''), 'accepted', B.why);
     closeSheets(); toast(P.n + ' days off set. Comeback: ' + n + ' lighter sessions after.', 4000);

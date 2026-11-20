@@ -38,7 +38,7 @@ function lighten(p, level) {
 function writeWeek(level, reason) {
   const t = todayStr(); let n = 0;
   for (let i = 0; i < 7; i++) {
-    const ds = dateAdd(t, i); if (D().overrides.some((o) => o.date === ds && o.reason === 'travel')) continue;
+    const ds = dateAdd(t, i); if (D().overrides.some((o) => o.date === ds && /travel|break|rest day|sick|comeback|post race|race taper/.test(o.reason || ''))) continue;
     const raw = sessionFor0(ds), L = raw && lighten(raw.p, level);
     if (L) { send({ action: 'log', table: 'Overrides', row: Object.assign({ date: ds, reason }, L) }); n++; }
   }
@@ -74,7 +74,7 @@ function deloadCard() {
 /* ======================= 54. ease back in after a missed week ======================= */
 function missedWeek() {
   const t = todayStr(); if (travel() || LS.getItem('ease-dis') > dateAdd(t, -7)) return 0;
-  if (D().overrides.some((o) => o.date >= t && /deload|ease/.test(o.reason || ''))) return 0;
+  if (D().overrides.some((o) => o.date >= dateAdd(t, -7) && /deload|ease|break|comeback|sick|post race|race taper/.test(o.reason || ''))) return 0;
   let miss = 0;
   for (let i = 1; i <= 7; i++) { const ds = dateAdd(t, -i); if (ds < (D().cfg.program_start || '')) continue; const s = sessionFor0(ds); if (s && s.p.load !== 'Rest' && s.p.load !== 'Recovery' && !didTrain(ds)) miss++; }
   return miss >= 3 ? miss : 0;
@@ -93,7 +93,7 @@ function volumeCard() {
   let mode = 'logged';
   if (logged.length) logged.forEach((s) => { const g = muscleOf(s.exercise); if (g) V[g] = (V[g] || 0) + 1; });
   else {
-    mode = 'planned'; const dw = new Date(t + 'T12:00:00Z').getUTCDay();
+    mode = 'planned'; const dw = weekIdx(t);
     for (let i = 0; i < 7; i++) { const s = sessionFor(dateAdd(t, i - dw)); if (!s) continue; parseSession(s.details).filter((b) => !b.skip).forEach((b) => b.ex.forEach((e) => { const g = muscleOf(e); if (g) V[g] = (V[g] || 0) + setsIn(e); })); }
   }
   const rows = MUSC.map(([g]) => { const n = V[g] || 0, lo = g === 'Core' || g === 'Arms' ? 6 : 10, hi = g === 'Core' || g === 'Arms' ? 15 : 20; return { g, n, lo, hi, st: n < lo ? 'low' : n > hi ? 'high' : 'ok' }; });
@@ -168,7 +168,7 @@ function shoesCard() {
 /* ======================= 39. protein-first fix ======================= */
 const PROT = [['Greek yogurt, 200 g', 20, 130], ['Tuna can in water', 25, 110], ['Whey shake, 1 scoop', 24, 120], ['Cottage cheese, 200 g', 24, 180], ['Chicken breast, 150 g cooked', 46, 240], ['4 egg whites', 14, 70], ['Lean beef, 100 g cooked', 26, 200]];
 function proteinGap() {
-  const ds = todayStr(), p = planFor(ds); if (!p) return 0;
+  const ds = todayStr(), p = dayPlan(ds); if (!p) return 0;
   const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), tg = targetFor(p.daytype);
   const left = ms.filter((m) => !ml.some((r) => r.slot === m.slot)).reduce((a, m) => a + (Number(m.protein) || 0), 0);
   return Math.round(proteinTarget(tg) - proteinEaten(ms, ml) - left);
@@ -210,7 +210,7 @@ function fastBody() {
 function foodCheck() {
   const t = todayStr(); let planned = 0, on = 0, late = 0, extras = 0, pSum = 0, pT = 0, days = 0;
   for (let i = 1; i <= 7; i++) {
-    const ds = dateAdd(t, -i), p = planFor(ds); if (!p) continue; const ms = mealsFor(p.daytype), ml = logs('MealLog', ds); if (!ml.length) continue;
+    const ds = dateAdd(t, -i), p = dayPlan(ds); if (!p) continue; const ms = mealsFor(p.daytype), ml = logs('MealLog', ds); if (!ml.length) continue;
     days++; ms.filter((m) => Number(m.kcal) > 0).forEach((m) => { planned++; const r = ml.find((x) => x.slot === m.slot); if (r && r.status === 'ate') on++; });
     if (lateMeal(ds)) late++; extras += ml.filter((r) => r.status === 'extra').length; pSum += proteinEaten(ms, ml); pT += proteinTarget(targetFor(p.daytype));
   }
@@ -221,7 +221,7 @@ function foodCheck() {
   return { score, onp, prot: Math.round(pSum / days), late, extras, days, fix };
 }
 function foodCheckCard(home) {
-  if (home && new Date(todayStr() + 'T12:00:00Z').getUTCDay() !== 0) return '';
+  if (home && weekIdx(todayStr()) !== 0) return ''; // first day of the plan week
   const F = foodCheck(); if (!F) return '';
   return (home ? '' : '<h2>Weekly food check</h2>') + '<section class="card fcheck"><div class="row sp"><div>' + (home ? '<span class="eyebrow3">Weekly food check</span>' : '') + '<b class="ld-n">' + F.score + '</b><span class="mut small"> / 100</span></div><span class="pill ' + (F.score >= 75 ? 'keep' : F.score >= 50 ? 'reduce' : 'swap') + '">' + (F.score >= 75 ? 'GOOD WEEK' : F.score >= 50 ? 'OK' : 'NEEDS WORK') + '</span></div>' +
     '<p class="small" style="margin:8px 0 0">' + Math.round(F.onp * 100) + '% meals on plan · ' + (D().meals.some((m) => Number(m.protein) > 0) ? F.prot + ' g protein a day · ' : '') + F.late + ' late nights · ' + F.extras + ' extras</p><p class="fb-next"><b>One thing to fix</b>' + esc(F.fix) + '</p></section>';

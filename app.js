@@ -21,10 +21,26 @@ function local(d) {
   return { date: g('year') + '-' + g('month') + '-' + g('day'), time: h + ':' + g('minute'), hour: Number(h) };
 }
 const todayStr = () => local().date;
+// "1 days" → "1 day" everywhere text is rendered (only exact 1, never 21 or 0.1)
+const PLU = /(^|[^\d.,])1 (day|session|week|meal|exercise|hour|time|minute|supplement|run|workout|thing|block|night|set|rep|round|lighter session)s\b/g;
+const plural = (h) => String(h).replace(PLU, '$11 $2');
 const nowTime = () => local().time;
 function dateAdd(ds, n) { const d = new Date(ds + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
 function daysBetween(a, b) { return Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5); }
 function dow(ds) { return DAYS[new Date(ds + 'T12:00:00Z').getUTCDay()]; }
+// plan weeks start on the program_start weekday (Saturday for the current plan); Sunday if no start is set
+function weekIdx(ds) { const st = S.data && S.data.cfg.program_start; return st ? ((daysBetween(st, ds) % 7) + 7) % 7 : new Date(ds + 'T12:00:00Z').getUTCDay(); }
+function weekStart(ds) { return dateAdd(ds, -weekIdx(ds)); }
+// "Week 2 of 4", "Starts Sat 21 Nov" or "Block done · repeating week 2"
+function weekLabel(ds) {
+  const st = S.data && S.data.cfg.program_start, N = planWeeks();
+  if (!(S.data && (S.data.plan || []).length)) return 'No program yet';
+  if (!st) return 'Week ' + weekNo(ds) + ' of ' + N;
+  const diff = daysBetween(st, ds);
+  if (diff < 0) return 'Plan starts ' + (diff === -1 ? 'tomorrow' : niceDate(st));
+  if (diff >= N * 7) return 'Block done · repeating week ' + weekNo(ds);
+  return 'Week ' + weekNo(ds) + ' of ' + N;
+}
 function weekNo(ds) {
   const start = (S.data && S.data.cfg.program_start) || ds;
   const diff = daysBetween(start, ds);
@@ -55,8 +71,8 @@ function updatedLabel() {
 let toastT;
 const toast = (m, ms) => {
   const t = $('#toast'), U = S.undo, can = U && !U.used && Date.now() - U.at < 1500;
-  t.textContent = m; if (can) { U.shown = true; t.insertAdjacentHTML('beforeend', '<button class="undo" data-undo="1">Undo</button>'); ms = Math.max(ms || 0, 5000); }
-  t.className = 'on'; clearTimeout(toastT); toastT = setTimeout(() => (t.className = ''), ms || 2200);
+  t.innerHTML = '<span class="tmsg">' + plural(esc(m)) + '</span>'; if (can) { U.shown = true; t.insertAdjacentHTML('beforeend', '<button class="undo" data-undo="1">Undo</button>'); ms = Math.max(ms || 0, 5000); }
+  t.className = 'on' + (can ? ' act' : ''); clearTimeout(toastT); toastT = setTimeout(() => (t.className = ''), ms || 2200);
 };
 
 /* ---------- API (POST only) ---------- */
@@ -139,7 +155,12 @@ function normalize(d) {
 /* ---------- data helpers ---------- */
 const D = () => S.data;
 const logs = (t, date) => D().logs[t].filter((r) => r.date === date);
+// the day as you will actually live it: override (break, comeback, moved…) first, then the plan. Use for meals and targets.
+function dayPlan(ds) { const s = sessionFor0(ds); return s ? s.p : planFor(ds); }
+const ACTIVE_REC = { session: 'Active recovery', load: 'Recovery', details: '# Active recovery 40 min\n- Easy walk, bike or swim 30 min, HR under 130\n- Mobility 10 min: hips, ankles, thoracic spine\n# Note\n- You should feel better after than before.' };
 function planFor(ds, day) { return D().plan.find((p) => String(p.week) === String(weekNo(ds)) && p.day === (day || dow(ds))); }
+// meal-day names: fri / sat are the low-carb days in the sheet
+function dayTypeName(t) { t = String(t || ''); return /^(fri|sat)$/i.test(t) ? 'Low-carb day' : t ? t.charAt(0).toUpperCase() + t.slice(1) + ' day' : 'Meal day'; }
 function mealsFor(daytype) { return fastRemap(D().meals.filter((m) => m.daytype === daytype)); }
 function targetFor(daytype) { return D().targets.find((t) => t.daytype === daytype) || {}; }
 function whoopFor(ds) { return D().whoop.find((w) => w.date === ds); }
@@ -154,7 +175,7 @@ function sessionFor0(ds) {
   const w = whoopFor(ds), ch = verdictChoice(ds);
   if (ch !== 'accepted' || !w) return { p, name: p.session, details: p.details, mode: 'plan' };
   if (w.verdict === 'swap') {
-    const rec = planFor(ds, 'Sat') || p;
+    const rec = D().plan.find((x) => String(x.week) === String(weekNo(ds)) && x.load === 'Recovery') || ACTIVE_REC;
     return { p, name: rec.session + ' (swapped from ' + p.session + ')', details: rec.details, mode: 'swap' };
   }
   if (w.verdict === 'reduce') return { p, name: p.session + ' (reduced)', details: reduceDetails(p.details), mode: 'reduce' };
@@ -301,6 +322,23 @@ function tiles(w) {
   }).join('') + '</div>';
 }
 
+/* rest / break / recovery day detection (no WHOOP training verdict on these days) */
+function restInfo(ds, ses) {
+  if ((!ses || !ses.p) && !(D().plan || []).length) return { kind: 'noplan', label: 'No program yet' };
+  const st = D().cfg.program_start;
+  if ((!ses || !ses.p) && st && ds < st) return { kind: 'rest', label: weekLabel(ds) };
+  if (!ses || !ses.p) return { kind: 'rest', label: 'Rest day' };
+  const p = ses.p, load = ses.mode === 'swap' ? 'Recovery' : p.load;
+  const ov = D().overrides.find((o) => o.date === ds), why = String((ov && ov.reason) || '');
+  if (/^break/i.test(why)) {
+    const isB = (d) => D().overrides.some((o) => o.date === d && /^break/i.test(String(o.reason || '')));
+    let a = ds, b = ds; while (isB(dateAdd(a, -1))) a = dateAdd(a, -1); while (isB(dateAdd(b, 1))) b = dateAdd(b, 1);
+    return { kind: 'break', ov: true, label: 'Break · day ' + (daysBetween(a, ds) + 1) + ' of ' + (daysBetween(a, b) + 1) };
+  }
+  if (load === 'Rest' || /^rest\b/i.test(String(p.session || ''))) return { kind: 'rest', ov: !!ov && /^rest day|^sick|^ill/i.test(why), label: ov && /^rest day/i.test(why) ? 'Rest day · your choice' : 'Rest day' };
+  if (load === 'Recovery') return { kind: 'recovery' };
+  return null;
+}
 function heroCard(ds, w, ch, ses) {
   const d = d0(), p = ses && ses.p;
   const rec = w && w.verdict ? Number(w.recovery) || 0 : null;
@@ -311,25 +349,36 @@ function heroCard(ds, w, ch, ses) {
     swap: ['⇄', 'Change it today', 'Recovery ' + rec + '%. Skip this session and do Active Recovery instead.'],
     none: ['?', d.connected.whoop ? 'Waiting for your score' : 'No recovery data', d.connected.whoop ? 'WHOOP scores you after you wake. Train as planned, or tap sync to check.' : 'Connect WHOOP in More to get a daily go / change decision.']
   }[v];
-  if (ch === 'accepted' && v === 'swap') { V[0] = '⇄'; V[1] = 'Switched to recovery'; V[2] = 'Recovery ' + rec + '%. Today is Active Recovery instead of ' + p.session + '.'; }
-  if (ch === 'accepted' && v === 'reduce') { V[1] = 'Lighter session set'; V[2] = 'Last block removed. Use about 80% of your weights.'; }
-  if (ch === 'rejected') { V[2] = 'You chose the full plan. Recovery ' + rec + '%, so listen to your body and stop if something feels off.'; }
+  const RST = restInfo(ds, ses), rv = rec === null ? null : rec >= 67 ? 0 : rec >= 34 ? 1 : 2;
+  if (RST) {
+    V[0] = '☾';
+    if (RST.kind === 'noplan') { V[0] = '+'; V[1] = 'No program yet'; V[2] = 'Create one on Train and Apex builds every day around your goals and recovery.'; }
+    else if (RST.kind === 'recovery') { if (v === 'reduce' || v === 'swap') { V[1] = 'Easy day, keep it gentle'; V[2] = 'Recovery ' + rec + '%. Today is already a recovery day. Keep it short and easy' + (v === 'swap' ? ', or rest if you feel flat.' : '.'); } else if (v === 'keep') { V[1] = 'Easy day'; V[2] = 'Recovery ' + rec + '%. Feeling good, but keep it easy. That is the point of today.'; } else V[1] = 'Easy day'; }
+    else { V[1] = RST.kind === 'break' ? 'Break day' : 'Rest day'; V[2] = rv === null ? 'No training today. Walk, stretch, sleep well.' : ['Recovery ' + rec + '%. Enjoy the rest. An easy walk is fine.', 'Recovery ' + rec + '%. Take it easy today. Walk, stretch, eat well.', 'Recovery ' + rec + '%. Your body needs this. Sleep early tonight.'][rv]; }
+  }
+  if (!RST && ch === 'accepted' && v === 'swap') { V[0] = '⇄'; V[1] = 'Switched to recovery'; V[2] = 'Recovery ' + rec + '%. Today is Active Recovery instead of ' + p.session + '.'; }
+  if (!RST && ch === 'accepted' && v === 'reduce') { V[1] = 'Lighter session set'; V[2] = 'Last block removed. Use about 80% of your weights.'; }
+  if (!RST && ch === 'rejected') { V[2] = 'You chose the full plan. Recovery ' + rec + '%, so listen to your body and stop if something feels off.'; }
   const wl = p && logs('WorkoutLog', ds).find((r) => r.session === ses.name);
   const blocks = ses ? (String(ses.details).match(/^#\s*Block/gim) || []).length : 0;
   const load = ses ? (ses.mode === 'swap' ? 'Recovery' : p.load) : '';
-  let h = '<section class="card hero v-' + v + '" aria-label="Today: ' + esc(V[1]) + '">' +
+  let h = '<section class="card hero v-' + (RST ? 'rest' : v) + '" aria-label="Today: ' + esc(V[1]) + '">' +
     '<div class="hero-top"><div class="hring" role="img" aria-label="' + (rec === null ? 'No recovery score' : 'Recovery ' + rec + ' percent') + '">' + ringSVG(rec === null ? 0 : rec / 100, 76, 8, 'url(#rg)') + '<div class="hero-num xs"><b>' + (rec === null ? '--' : cnt(rec)) + '</b><span>REC</span></div></div>' +
-    '<div class="hero-ses"><span class="eyebrow3">Today\'s workout</span>' + (ses ? '<h3>' + esc(ses.name) + '</h3><p class="mut small"><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span> ' + esc(p.time) + (blocks ? ' · ' + blocks + ' blocks' : '') + '</p>' : '<h3>Rest day</h3>') + '</div></div>' +
+    '<div class="hero-ses"><span class="eyebrow3">' + (RST && RST.label ? esc(RST.label) : 'Today\'s workout') + '</span>' + (ses ? '<h3>' + esc(ses.name) + '</h3><p class="mut small"><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span> ' + esc(p.time) + (blocks ? ' · ' + blocks + ' blocks' : '') + '</p>' : '<h3>' + (RST && RST.kind === 'noplan' ? 'Nothing planned' : 'Rest day') + '</h3>') + '</div></div>' +
     '<div class="vbox"><span class="vic" aria-hidden="true">' + V[0] + '</span><div><b>' + esc(V[1]) + '</b><span>' + esc(V[2]) + '</span></div></div>';
   if (w && w.verdict) h += tiles(w);
-  if (ses) {
+  if (RST && RST.kind === 'noplan') h += '<button class="link-row" data-act="wizopen">Create your program<span class="chev">›</span></button>';
+  else if (ses && RST && RST.kind !== 'recovery') {
+    if (wl) h += '<div class="row sp hero-act"><span class="pill ' + (wl.status === 'done' ? 'keep' : 'swap') + '">' + esc(wl.status.toUpperCase()) + ' · ' + esc(wl.time) + '</span><button class="txt fit" data-act="wundo">Undo</button></div>';
+    h += '<button class="link-row" data-act="ssheet">' + (RST.kind === 'break' ? 'Break day ideas' : 'Rest day ideas') + '<span class="chev">›</span></button>' + (RST.ov && !wl ? '<button class="link-row" data-act="restcancel">Train today instead<span class="chev">›</span></button>' : '');
+  } else if (ses) {
     const RC = todayRecs(ds);
     if (wl) h += '<div class="row sp hero-act"><span class="pill ' + (wl.status === 'done' ? 'keep' : 'swap') + '">' + esc(wl.status.toUpperCase()) + ' · ' + esc(wl.time) + '</span><button class="txt fit" data-act="wundo">Undo</button></div>';
     else h += (RC.length ? '<button class="p recb" data-act="recopen">' + ICON(CI.spark) + ' Recommended' + (RC.length > 1 ? ' · ' + RC.length : '') + '</button>' : '') + '<div class="row hero-act' + (RC.length ? ' tight' : '') + '"><button class="g" data-act="wdone">Did it</button><button data-act="wskip">Skipped</button></div>';
     if (ch) h += '<p class="chosen">' + (ch === 'accepted' ? 'Plan adjusted for today' : 'Keeping the original plan') + ' · <button class="txt" data-act="vundo">Change</button></p>';
     h += '<button class="link-row" data-act="ssheet">View full session<span class="chev">›</span></button>' + (wl || sessionFor0(ds).p.load === 'Rest' ? '' : '<button class="link-row" data-act="offopen">Take today off<span class="chev">›</span></button>');
   }
-  if (w && w.reason) h += '<details class="why"><summary>Why this decision?</summary><p>' + esc(w.reason) + '</p></details>';
+  if (w && w.reason && !(RST && RST.kind !== 'recovery')) h += '<details class="why"><summary>Why this decision?</summary><p>' + esc(w.reason) + '</p></details>';
   return h + '</section>';
 }
 function miniRing(key, label, val, tgt, unit, stroke, txt) {
@@ -339,7 +388,7 @@ function miniRing(key, label, val, tgt, unit, stroke, txt) {
 const ST_ICON = { ate: '✓', swap: '↺', extra: '+', skipped: '✕', next: '•', todo: '' };
 function viewToday() {
   const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), p = ses && ses.p, w = whoopFor(ds), ch = verdictChoice(ds);
-  let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · Week ' + p.week : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
+  let h = '<header class="top home"><div class="top-l"><p class="date">' + esc(niceDate(ds)) + (p ? ' · ' + esc(weekLabel(ds).replace(/ of \d+$/, '')) : '') + '</p><h1>' + greeting() + (c.name ? ',<br>' + esc(c.name) : '') + '</h1>' + updatedLabel() + '</div>' +
     '<button class="sync-ic' + (S.busy ? ' busy' : '') + '" data-act="sync" aria-label="Sync WHOOP and Strava now">' + ICON(I.sync) + '</button></header>';
   h += syncBanner() + tzBanner() + sickCard() + ramCard() + briefCard() + raceWeekCard() + postRaceCard();
   h += heroCard(ds, w, ch, ses) + (ses && ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>Injury mode: ' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped to protect your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '.</span></p>' : '') + restDayCard() + wrCard() + missedCard() + easeCard() + tipCard();
@@ -386,7 +435,7 @@ function infoSheet(title, body, id) {
   const m = document.createElement('div');
   m.className = 'modal info'; if (id) m.dataset.id = id;
   m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', title);
-  m.innerHTML = '<div class="sheet"><div class="sheet-h"><h3>' + esc(title) + '</h3><button class="icon-btn x" data-close aria-label="Close">✕</button></div>' + body + '</div>';
+  m.innerHTML = '<div class="sheet"><div class="sheet-h"><h3>' + esc(title) + '</h3><button class="icon-btn x" data-close aria-label="Close">✕</button></div>' + plural(body) + '</div>';
   S.lastFocus = document.activeElement;
   document.body.appendChild(m);
   setTimeout(() => { const f = m.querySelector('input,[data-close]'); if (f) f.focus(); }, 60);
@@ -397,7 +446,7 @@ function refreshSheet(id, body) {
   if (!m) return;
   const h = m.querySelector('.sheet-h');
   while (h.nextSibling) h.nextSibling.remove();
-  h.insertAdjacentHTML('afterend', body);
+  h.insertAdjacentHTML('afterend', plural(body));
 }
 function closeSheets(now) {
   const open = document.querySelectorAll('.modal.info');
@@ -411,7 +460,7 @@ document.addEventListener('keydown', (ev) => {
   closeSheets();
 });
 function mealSheet(slot) {
-  const ds = todayStr(), p = planFor(ds); if (!p) return;
+  const ds = todayStr(), p = dayPlan(ds); if (!p) return;
   const m = mealsFor(p.daytype).find((x) => x.slot === slot), r = logs('MealLog', ds).find((x) => x.slot === slot);
   if (!m) { if (r) infoSheet(r.extra_name || 'Snack', '<p class="mut">' + esc(r.kcal) + ' kcal at ' + esc(r.time) + '</p>' + (r.note ? '<p class="small" style="margin-top:8px">' + esc(r.note).replace(/; /g, '<br>') + '</p>' : '') + '<button class="r" style="width:100%;margin-top:20px" data-act="mundo" data-slot="' + esc(slot) + '">Delete</button>'); return; }
   let b = '<p class="mut small">Planned ' + esc(m.time) + ' · ' + esc(m.kcal) + ' kcal</p><p style="margin:12px 0">' + esc(m.items) + '</p>' + (m.supps ? '<p class="supps">Supplements · ' + esc(m.supps) + '</p>' : '');
@@ -521,16 +570,17 @@ function setCfg(key, value) { send({ action: 'config', key, value: String(value)
 
 /* ---------- Meals ---------- */
 function shopKey(per, item) { return 'shop-' + periodKey(per) + '-' + per + item; }
-function periodKey(per) { const ds = todayStr(); return per === 'monthly' ? ds.slice(0, 7) : dateAdd(ds, -new Date(ds + 'T12:00:00Z').getUTCDay()); }
+function periodKey(per) { const ds = todayStr(); return per === 'monthly' ? ds.slice(0, 7) : weekStart(ds); }
 function viewMeals() {
-  const ds = todayStr(), p = planFor(ds), d = d0();
+  const ds = todayStr(), p = dayPlan(ds), d = d0();
   let h = '<header class="top"><div><p class="date">' + esc(niceDate(ds)) + '</p><h1>Meals</h1></div></header>';
+  if (!p || !mealsFor(p.daytype).length) h += '<section class="card"><p class="mut small" style="margin:0">' + (!(D().meals || []).length ? 'No meal plan yet. Add your meals to the Meals tab of your Google Sheet, then tap Reload from sheet in More.' : 'No meals planned for today. You can still log food with Add a snack.') + '</p></section>';
   if (p) {
     const ms = mealsFor(p.daytype), ml = logs('MealLog', ds), t = targetFor(p.daytype), eaten = kcalEaten(ms, ml), kT = Number(t.kcal) || 1;
     h += '<section class="card macro"><div class="macro-ring">' + ringSVG(eaten / kT, 124, 12, 'url(#gk)') + '<div class="hero-num sm"><b>' + cnt(eaten) + '</b><span>of ' + esc(t.kcal) + '</span></div></div><div class="macros">' +
       [['Protein', proteinEaten(ms, ml) + ' / ' + proteinTarget(t), 'var(--ringA)', Math.min(100, (proteinEaten(ms, ml) / proteinTarget(t)) * 100)], ['Carbs target', t.carbs, 'var(--ringC)', 100], ['Fat target', t.fat, '#f59e0b', 100]].map(([n, g, col, pc]) => '<div class="mac"><span class="mut small">' + n + '</span><b>' + esc(g) + ' g</b><i style="background:linear-gradient(90deg,' + col + ' ' + pc + '%,var(--card2) ' + pc + '%)"></i></div>').join('') + '</div></section>' +
       '<button class="card eoc" data-act="eatout"><span class="li-ic" style="background:#f97316">' + ICON(LI.fork) + '</span><span><b>Eating out today?</b><span class="mut small">Best choices on the menu and how to fit your day</span></span><span class="chev">›</span></button>';
-    h += '<p class="sub center">' + esc(p.daytype.charAt(0).toUpperCase() + p.daytype.slice(1)) + ' day · ' + esc(p.session) + '</p>';
+    h += '<p class="sub center">' + esc(dayTypeName(p.daytype)) + ' · ' + esc(p.session) + '</p>';
     const nxt = ms.find((m) => !ml.find((x) => x.slot === m.slot));
     const ST = { ate: ['✓', 'Ate'], swap: ['↺', 'Swapped'], skipped: ['✕', 'Skipped'] };
     h += '<h2>Today</h2><div class="mtl">' + ms.map((m) => {
@@ -562,15 +612,16 @@ function viewMeals() {
 const LIB_COL = { Kettlebell: ['#f97316', '#ef4444'], 'Animal Flow': ['#22c55e', '#14b8a6'], Mobility: ['#38bdf8', '#6366f1'], HYROX: ['#facc15', '#f97316'], Striking: ['#ef4444', '#a855f7'], Grappling: ['#6366f1', '#0ea5e9'] };
 function viewTrain() {
   const today = todayStr(), d = d0(), sel = S.viewDay || today;
-  const start = dateAdd(today, -new Date(today + 'T12:00:00Z').getUTCDay());
-  let h = '<header class="top"><div><p class="date">Week ' + weekNo(sel) + ' of ' + planWeeks() + '</p><h1>Train</h1></div></header>' + programCard() + tuneCard() + deloadCard() + '<div class="wk" role="group" aria-label="This week">';
+  const start = weekStart(sel);
+  let h = '<header class="top"><div><p class="date">' + esc(weekLabel(sel)) + '</p><h1>Train</h1></div></header>' + programCard() + tuneCard() + deloadCard() + '<div class="wk" role="group" aria-label="This week">';
   for (let i = 0; i < 7; i++) {
     const ds = dateAdd(start, i), done = logs('WorkoutLog', ds).some((r) => r.status === 'done');
     const sv = sessionFor(ds), ld = !sv || sv.p.load === 'Rest' ? 'rest' : sv.p.load === 'Hard' ? 'hard' : sv.p.load === 'Moderate' ? 'mod' : 'rec';
-    h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today ' : '') + 'ld-' + ld + '" aria-pressed="' + (ds === sel) + '" aria-label="' + DAYS[i] + ' ' + Number(ds.slice(8)) + ', ' + (sv ? sv.p.session + ', ' + sv.p.load : 'rest') + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + DAYS[i].slice(0, 1) + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd" aria-hidden="true">' + (done ? '✓' : '') + '</i></button>';
+    h += '<button class="' + (ds === sel ? 'on ' : '') + (done ? 'done ' : '') + (ds === today ? 'today ' : '') + 'ld-' + ld + '" aria-pressed="' + (ds === sel) + '" aria-label="' + dow(ds) + ' ' + Number(ds.slice(8)) + ', ' + (sv ? sv.p.session + ', ' + sv.p.load : 'rest') + (done ? ', done' : '') + '" data-act="vday" data-d="' + ds + '"><small>' + dow(ds).slice(0, 1) + '</small><b>' + Number(ds.slice(8)) + '</b><i class="wd" aria-hidden="true">' + (done ? '✓' : '') + '</i></button>';
   }
   h += '</div><p class="wklegend" aria-hidden="true"><span><i style="background:#ff6b5e"></i>Hard</span><span><i style="background:#f5b83d"></i>Moderate</span><span><i style="background:#4fd1c5"></i>Easy</span><span><i style="background:var(--ok)"></i>Done</span></p>';
   const ses = sessionFor(sel);
+  if (!ses) h += '<section class="card emptyday"><p class="mut small" style="margin:0">' + (!D().plan.length ? 'No program yet. Tap Create new program above.' : D().cfg.program_start && sel < D().cfg.program_start ? 'Before your plan starts. Nothing planned.' : 'Rest day. Nothing planned.') + '</p></section>';
   if (ses) {
     const load = ses.mode === 'swap' ? 'Recovery' : ses.p.load;
     h += '<section class="card"><div class="work-top"><div><span class="tag ' + esc(String(load).toLowerCase()) + '">' + esc(load) + '</span><h3>' + esc(ses.name) + '</h3><p class="mut small">' + esc(niceDate(sel)) + ' · ' + esc(ses.p.time) + '</p></div><div class="work-ic">' + ICON(I.train) + '</div></div>' +
@@ -610,9 +661,11 @@ function viewInsights() {
   const d = d0(), today = todayStr(), mk = S.metric || 'recovery', M = METRICS[mk], tab = S.insTab || 'recovery';
   let h = '<header class="top"><div><p class="date">Your trends</p><h1>Insights</h1></div></header>';
   // decisions waiting for you always come first
-  if (d.suggestions.length) {
+  // suggestions older than 10 days are stale (the plan has usually moved on)
+  const SG = d.suggestions.filter((s) => !s.date || String(s.date).slice(0, 10) >= dateAdd(today, -10));
+  if (SG.length) {
   h += '<h2>Waiting for you</h2>';
-  d.suggestions.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
+  SG.forEach((s) => { h += '<div class="card"><p>' + esc(s.text) + '</p><div class="row" style="margin-top:16px"><button class="g" data-act="sacc" data-id="' + esc(s.id) + '">Accept</button><button class="r" data-act="srej" data-id="' + esc(s.id) + '">Reject</button></div></div>'; });
   }
   const T = [['recovery', 'Recovery'], ['training', 'Training'], ['body', 'Body'], ['you', 'You']];
   h += '<div class="instab" role="tablist" aria-label="Insights sections">' + T.map(([k, l]) => '<button role="tab" aria-selected="' + (k === tab) + '" class="' + (k === tab ? 'on' : '') + '" data-act="instab" data-t="' + k + '">' + l + '</button>').join('') + '</div>';
@@ -671,7 +724,7 @@ function viewMore() {
     row({ act: 'intsheet', ic: '<path d="m3 20 6-11 4 6 3-4 5 9z"/><circle cx="17" cy="6" r="2"/>', bg: '#14b8a6', t: 'Sports I\'m into', s: ints.length ? esc(ints.slice(0, 3).join(', ')) + (ints.length > 3 ? ' +' + (ints.length - 3) : '') : 'e.g. rock climbing, swimming', end: ints.length ? '<span class="count">' + ints.length + '</span>' : '' }) + '</div>';
   h += '<h2>Coach</h2><div class="card list">' + row({ act: 'knowopen', ic: B7.id, bg: '#0ea5e9', t: 'About me', s: (d.knowledge || []).length ? 'Profile, plan, zones and race history' : 'Profile and notes your coach reads' }) + row({ act: 'chatopen', ic: LI.chat, bg: 'var(--accFill)', t: 'Ask your coach', s: 'Questions about training, food, recovery' }) + row({ act: 'memopen', ic: CI.spark, bg: '#8b5cf6', t: 'What your coach remembers', s: (d.memory || []).length ? d.memory.length + ' thing' + (d.memory.length > 1 ? 's' : '') : 'Nothing yet', end: (d.memory || []).length ? '<span class="count">' + d.memory.length + '</span>' : '' }) +
     row({ act: 'remopen', ic: LI.bell, bg: '#ef4444', t: 'Reminders', s: 'Meals, workout, water, bedtime' }) + row({ act: 'pwopen', ic: CI.cal, bg: '#0ea5e9', t: 'Plan your week', s: 'Move sessions around your calendar' }) +
-    row({ act: 'shareopen', ic: BI.share, bg: '#14b8a6', t: 'Share my week', s: D().cfg.share_token ? 'Link is on' : 'Read-only link for a friend or coach' }) + row({ act: 'ramopen', ic: B6.moon, bg: '#8b5cf6', t: ramadan() ? 'Ramadan mode · on' : 'Ramadan mode', s: ramadan() ? 'From ' + niceDate(ramadan().start) : 'Iftar and suhoor times, training moved' }) + row({ act: 'fastopen', ic: BI.moonc, bg: '#6d5ce8', t: 'Fasting mode', s: fasting() ? 'On · iftar ' + esc(fasting().iftar) : 'Ramadan or daily fasting' }) +
+    row({ act: 'shareopen', ic: BI.share, bg: '#14b8a6', t: 'Share my week', s: D().cfg.share_token ? 'Link is on' : 'Read-only link for a friend or coach' }) + row({ act: 'ramopen', ic: B6.moon, bg: '#8b5cf6', t: ramadan() ? 'Ramadan mode · on' : 'Ramadan mode', s: ramadan() ? 'From ' + niceDate(ramadan().start) : 'Iftar and suhoor times, training moved' }) + row({ act: 'fastopen', ic: BI.moonc, bg: '#6d5ce8', t: 'Fasting mode', s: fasting() ? 'On · iftar ' + esc(fasting().iftar) : 'Intermittent or daily fasting' }) +
     row({ act: 'cutopen', ic: BI.scale, bg: '#f59e0b', t: 'Weight plan', s: cut() ? 'Target ' + cut().target + ' kg' : 'Safe weight loss to a target' }) + row({ act: 'tropen', ic: TI.plane, bg: '#6d5ce8', t: 'Travel mode', s: travel() ? 'On · ' + esc(travel().place) : 'Off' }) + '</div>';
   h += '<h2>Data</h2><div class="card list">' +
     row({ act: 'sync', ic: I.sync, bg: 'var(--accFill)', t: S.busy ? 'Syncing…' : 'Sync now', s: 'Last good sync: ' + esc(ago(c.last_sync_ok)) }) +
@@ -720,7 +773,7 @@ function render() {
   if (!S.data) { app.innerHTML = '<div class="skel"><i></i><i></i><i></i></div>'; return; }
   const y = window.scrollY, key = S.tab + '|' + (S.viewDay || '') + '|' + (S.libTab || '') + '|' + (S.metric || '') + '|' + (S.shopPer || ''), fresh = S._shown !== key;
   S._shown = key;
-  try { app.innerHTML = VIEWS[S.tab](); } catch (e) { app.innerHTML = '<div class="card">Display error: ' + esc(e.message) + '</div>'; }
+  try { app.innerHTML = plural(VIEWS[S.tab]()); } catch (e) { app.innerHTML = '<div class="card">Display error: ' + esc(e.message) + '</div>'; }
   app.classList.remove('enter');
   if (fresh) { void app.offsetWidth; app.classList.add('enter'); countUp(app); }
   S.flash = null;

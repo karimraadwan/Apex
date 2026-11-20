@@ -1061,3 +1061,13 @@ button.card.gcc{display:flex;flex-direction:column;align-items:flex-start;gap:6p
 .recprev summary{cursor:pointer;color:var(--acc);font-weight:600;font-size:.875rem;min-height:44px;display:flex;align-items:center}
 .li.sel{background:var(--accTint)}
 .li.wrap .mut,.li.wrap .li-main span{white-space:normal;overflow:visible;text-overflow:clip}
+
+/* toast v2: compact snackbar, message left, Undo as a text action on the right */
+#toast{display:flex;align-items:center;gap:var(--s3);width:max-content;max-width:min(92vw,440px);min-height:48px;box-sizing:border-box;padding:10px var(--s4);border-radius:16px;text-align:left;line-height:1.35;background:var(--card2);border:1px solid var(--sep)}
+#toast.act{width:min(92vw,440px);padding-right:6px}
+#toast .tmsg{flex:1;min-width:0;overflow-wrap:anywhere}
+#toast .undo{flex:none;margin:0;min-height:44px;min-width:64px;padding:0 12px;background:transparent;color:var(--acc);font-weight:700;font-size:.9rem;letter-spacing:.02em;border-radius:12px;border-left:1px solid var(--sep);border-top-left-radius:0;border-bottom-left-radius:0}
+#toast .undo:active{background:var(--accFill);color:#fff}
+.v-rest{background:var(--card)}.v-rest .vbox{background:var(--accTint)}.v-rest .vbox .vic{background:var(--accFill);color:#fff}
+/* briefing labels never break mid-word at large text sizes */
+.bl{display:grid;grid-template-columns:max-content 1fr;column-gap:12px;row-gap:10px}.bl li{display:contents}.bl b{white-space:nowrap}

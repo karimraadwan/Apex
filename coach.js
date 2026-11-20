@@ -86,8 +86,11 @@ function didTrain(ds) {
   return logs('WorkoutLog', ds).some((r) => r.status === 'done') || D().strava.some((a) => a.date === ds);
 }
 function missedFix() {
-  const t = todayStr(), d = D(), dw = new Date(t + 'T12:00:00Z').getUTCDay(), start = d.cfg.program_start || '';
-  if (dw === 0) return null; // a new week starts on Sunday
+  const t = todayStr(), d = D(), start = d.cfg.program_start || '';
+  // position in the plan week (weeks start on the program_start weekday, Saturday by default)
+  const dw = start ? ((daysBetween(start, t) % 7) + 7) % 7 : (new Date(t + 'T12:00:00Z').getUTCDay() + 1) % 7;
+  if (dw === 0) return null; // first day of a new plan week
+  if (d.overrides.some((o) => o.date === t && /^(break|sick)/.test(o.reason || ''))) return null; // on a break or ill today
   for (let i = 1; i <= Math.min(3, dw); i++) {
     const ds = dateAdd(t, -i);
     if (ds < start || LS.getItem('missdis-' + ds)) continue;
@@ -105,6 +108,7 @@ function missedFix() {
   return null;
 }
 function missedCard() {
+  if (missedWeek()) return ''; // the ease-back card covers a missed week
   const m = missedFix(); if (!m) return '';
   const dayName = (ds) => (ds === todayStr() ? 'today' : DOW_L[new Date(ds + 'T12:00:00Z').getUTCDay()]);
   return '<section class="card missed"><div class="ms-top"><span class="ms-ic">' + ICON(CI.move) + '</span><div><span class="eyebrow3">Missed workout</span><h3>' + esc(m.s.p.session) + '</h3><p class="mut small">Planned for ' + esc(dayName(m.from)) + '. ' +
@@ -207,9 +211,9 @@ const DRAFT = ['analysing', 'review', 'building', 'ready', 'failed'];
 function progDraft() { return (D().programs || []).filter((p) => DRAFT.indexOf(p.status) >= 0).slice(-1)[0] || null; }
 function programCard() {
   const c = D().cfg, N = planWeeks(), t = todayStr(), w = weekNo(t), dr = progDraft();
-  const started = c.program_start && c.program_start <= t, pct = started ? Math.min(100, ((daysBetween(c.program_start, t) % (N * 7)) + 1) / (N * 7) * 100) : 0;
-  let h = '<section class="card prog"><span class="eyebrow3">Your program</span><h3>' + esc(c.program_name || 'Current plan') + '</h3><p class="mut small">' + (started ? 'Week ' + w + ' of ' + N : c.program_start ? 'Starts ' + esc(niceDate(c.program_start)) : N + ' weeks') + '</p>' +
-    '<div class="bar" role="img" aria-label="' + Math.round(pct) + ' percent through the program"><i style="width:' + pct + '%"></i></div>';
+  const started = c.program_start && c.program_start <= t, over = started && daysBetween(c.program_start, t) >= N * 7, pct = over ? 100 : started ? Math.min(100, ((daysBetween(c.program_start, t) % (N * 7)) + 1) / (N * 7) * 100) : 0;
+  let h = '<section class="card prog"><span class="eyebrow3">Your program</span><h3>' + esc(D().plan.length ? c.program_name || 'Current plan' : 'No program yet') + '</h3><p class="mut small">' + (!D().plan.length ? 'Tell Apex your goals and days, and it builds your weeks.' : over ? 'Finished ' + esc(niceDate(dateAdd(c.program_start, N * 7 - 1))) + '. Repeating week ' + w + ' until you create the next one.' : started ? 'Week ' + w + ' of ' + N : c.program_start ? 'Starts ' + esc(niceDate(c.program_start)) : N + ' weeks') + '</p>' +
+    (!D().plan.length ? '' : '<div class="bar" role="img" aria-label="' + Math.round(pct) + ' percent through the program"><i style="width:' + pct + '%"></i></div>');
   if (dr) {
     const msg = { analysing: ['Reading your documents…', 'busy'], building: ['Building your program…', 'busy'], review: ['Recommendations are ready for you', 'act'], ready: ['Your new program is ready to check', 'act'], failed: ['Program could not be built', 'bad'] }[dr.status];
     h += '<button class="draft ' + msg[1] + '" data-act="progopen" data-id="' + esc(dr.id) + '"><span class="dr-dot"></span><span class="dr-t"><b>' + esc(dr.name) + '</b><span>' + esc(msg[0]) + '</span></span><span class="chev">›</span></button>';
@@ -227,7 +231,8 @@ function guessFocus(s) {
   if (/engine|condition|metcon|hiit|hyrox/.test(s)) return 'Conditioning'; if (/mobil|recovery|flow|yoga|stretch/.test(s)) return 'Mobility';
   return 'Let Apex decide';
 }
-function nextSunday() { const t = todayStr(), dw = new Date(t + 'T12:00:00Z').getUTCDay(); return dateAdd(t, dw === 0 ? 7 : 7 - dw); }
+// next plan-week start (Saturday for the current plan; Sunday when no program is set)
+function nextSunday() { const t = todayStr(); return dateAdd(weekStart(t), 7); }
 function newWiz() {
   const d = D(), days = {}, race = nextRace();
   DAYS.forEach((x) => { const p = d.plan.find((r) => String(r.week) === '1' && r.day === x); days[x] = guessFocus(p && p.session); });
@@ -278,7 +283,7 @@ function wizBody() {
     h += '<div class="card list flat wsum">' +
       row({ ic: CI.doc, bg: '#ef4444', t: docs.length ? docs.length + ' document' + (docs.length > 1 ? 's' : '') : 'No documents', s: esc(docs.map((x) => (W.docs[x.url].label) + ': ' + x.name).join(' · ') || 'Built from your notes only') }) +
       row({ ic: CI.cal, bg: '#6d5ce8', t: esc(P.name || 'New program') + ' · ' + P.weeks + ' weeks', s: 'Starts ' + esc(niceDate(P.start)) + ' · ' + esc(P.goals.join(', ') || 'no goal picked') }) + '</div>' +
-      '<p class="lbl">Also use</p><div class="card list flat">' + tog('whoop', 'WHOOP', 'Recovery, HRV and sleep, last 14 days') + tog('strava', 'Strava', 'Your recent runs and paces') + tog('reels', 'Reels and TikToks', 'Titles and your notes') + tog('sports', 'Sports I\'m into', 'e.g. climbing days') + '</div>' +
+      '<p class="lbl">Also use</p><div class="card list flat">' + tog('whoop', 'WHOOP', 'Recovery, HRV and sleep, last 14 days') + tog('strava', 'Strava', 'Your recent runs and paces') + tog('reels', 'Your reels', 'Exercises from your ' + (RL.list ? RL.list.length + ' ' : '') + 'saved reels + links you add, picked for your days') + tog('sports', 'Sports I\'m into', 'e.g. climbing days') + '</div>' +
       '<div class="cost">' + ICON(CI.spark) + '<p class="small">I read your documents, then show you my recommendations to accept or reject before I write the weeks. It takes 2 to 5 minutes and you can close the app meanwhile. Each program costs about $0.30 to $0.60 on your Claude API account.</p></div>' +
       (d.ai ? '' : '<p class="err">Add your Claude API key first (SETUP.md, part 9).</p>') +
       '<div class="row wiz-nav"><button data-act="wback">Back</button><button class="p" data-act="wgen"' + (d.ai && !S.genBusy ? '' : ' disabled') + '>' + (S.genBusy ? 'Starting…' : ICON(CI.spark, 'ib') + ' Generate') + '</button></div>';
@@ -304,7 +309,8 @@ async function wizGen() {
   const docs = d.docs.filter((x) => (W.docs[x.url] || {}).on).map((x) => ({ name: x.name, label: W.docs[x.url].label || 'Other', note: W.docs[x.url].note || '', file_id: x.file_id || (String(x.url).match(/[-\w]{25,}/) || [''])[0] }));
   S.genBusy = true; wizRefresh();
   try {
-    const j = await call({ action: 'plan_start', prefs: Object.assign({}, P, { name: P.name || (nextRace() ? nextRace().name + ' block' : 'New program') }), docs });
+    const reels = P.use && P.use.reels === false ? [] : pickReels(P, await reelsLoad());
+    const j = await call({ action: 'plan_start', prefs: Object.assign({}, P, { name: P.name || (nextRace() ? nextRace().name + ' block' : 'New program') }), docs, reels });
     d.programs.push({ id: j.id, status: 'analysing', name: P.name || 'New program', step: 'Reading your documents' }); save();
     S.wiz = null; LS.removeItem('wiz'); S.genBusy = false;
     progOpen(j.id); render();
@@ -466,7 +472,7 @@ function progRefreshKeep() { keepScroll('prog', progBody()); }
 
 /* ---------- food log: type what you ate, Claude estimates the calories ---------- */
 function foodOpen(mode, slot, time) {
-  const m = mode === 'swap' && D().plan ? mealsFor((planFor(todayStr()) || {}).daytype).find((x) => x.slot === slot) : null;
+  const m = mode === 'swap' && D().plan ? mealsFor((dayPlan(todayStr()) || {}).daytype).find((x) => x.slot === slot) : null;
   S.food = { mode, slot, time: time || nowTime(), rows: [{ name: '', qty: '' }], est: null, busy: false, err: '', planned: m ? m.name : '' };
   infoSheet(mode === 'swap' ? 'What did you eat instead?' : 'Extra meal or snack', foodBody(), 'food');
 }

@@ -73,3 +73,23 @@ function dayTimeline(ms, ml, next, p) {
   return '<section class="card tline"><div class="tline-h"><span><b>' + done + '</b> of ' + ms.length + ' meals</span>' + (SL.length ? '<span><b>' + sOn + '</b> of ' + SL.length + ' supplements</span>' : '') + '</div><ol class="trs">' + all + '</ol>' +
     '<button class="tr-add" data-act="mextra">' + ICON(I.plus) + ' Add a snack or extra food</button></section>';
 }
+
+/* ======================= reels for the program builder =======================
+   Picks up to 40 of your saved reels that fit the new program (day focus, goals, notes),
+   reels you also saved as links first. Sent compactly: id, title, tags, first key points. */
+const FOCUS_TAGS = { legs: ['legs', 'power', 'hips'], calisth: ['calisthenics', 'shoulders', 'grip', 'core', 'muscle-up'], pull: ['calisthenics', 'grip', 'shoulders'], push: ['calisthenics', 'shoulders', 'core'],
+  kettle: ['kettlebell', 'complex', 'emom'], condition: ['emom', 'amrap', 'hyrox', 'complex', 'kettlebell', 'carry'], hyrox: ['hyrox', 'carry', 'emom', 'kettlebell'], mobil: ['mobility', 'hips', 'spine', 'stretching', 'animal flow'],
+  rest: ['mobility', 'stretching'], run: ['running', 'legs', 'hips'], strik: ['boxing', 'mma', 'power'], box: ['boxing', 'mma'], mma: ['mma', 'boxing', 'grip'], grappl: ['mma', 'grip', 'core'], core: ['core', 'spine'], animal: ['animal flow', 'mobility'], strength: ['power', 'legs', 'calisthenics'] };
+function pickReels(P, list) {
+  list = list || RL.list || []; if (!list.length) return [];
+  const words = [].concat(P.goals || [], Object.values(P.days || {}), [P.notes || '']).join(' ').toLowerCase();
+  const want = {}; Object.keys(FOCUS_TAGS).forEach((k) => { if (words.indexOf(k) >= 0) FOCUS_TAGS[k].forEach((t, i) => { want[t] = (want[t] || 0) + (i === 0 ? 3 : 1); }); });
+  if (!Object.keys(want).length) ['legs', 'calisthenics', 'kettlebell', 'mobility', 'core'].forEach((t) => { want[t] = 1; });
+  const noteW = String(P.notes || '').toLowerCase().split(/[^a-z-]+/).filter((x) => x.length > 4);
+  const saved = {}; (D().library || []).forEach((l) => { const m = String(l.url || '').match(/\/(?:reel|p)\/([\w-]+)/); if (m) saved[m[1]] = l.note || true; });
+  const sc = list.map((r) => { let s = saved[r.id] ? (typeof saved[r.id] === 'string' ? 60 : 50) : 0; (r.tags || []).forEach((t) => { s += want[t] || 0; }); const tl = r.t.toLowerCase(); noteW.forEach((w) => { if (tl.indexOf(w) >= 0) s += 2; }); return [r, s]; })
+    .filter((x) => x[1] > 0).sort((a, b) => b[1] - a[1]);
+  const per = {}, out = [];
+  for (const [r] of sc) { const k = (r.tags || [])[0] || 'other'; if ((per[k] = (per[k] || 0) + 1) > 10 && !saved[r.id]) continue; out.push(r); if (out.length >= 40) break; }
+  return out.map((r) => ({ id: r.id, t: r.t.slice(0, 90), tags: (r.tags || []).slice(0, 4), p: (r.p || []).slice(0, 4).map((x) => String(x).slice(0, 110)), note: typeof saved[r.id] === 'string' ? saved[r.id].slice(0, 120) : '' }));
+}

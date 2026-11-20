@@ -264,7 +264,7 @@ function restDayCard() {
 
 /* ======================= 136. week review chat ======================= */
 const BLOCK = ['Work', 'Sleep', 'Travel', 'Ill', 'Motivation', 'Food', 'Social', 'Nothing'];
-function wrDue() { const t = todayStr(), dw = weekdayOf(t), h = local().hour; if (!D().ai || !((dw === 4 && h >= 17) || dw === 5 || dw === 6)) return false; const last = D().cfg.wr_last || ''; return !last || daysBetween(last, t) >= 4; }
+function wrDue() { const t = todayStr(), dw = weekIdx(t), h = local().hour; if (!D().ai || !((dw === 5 && h >= 17) || dw === 6)) return false; /* last 1.5 days of the plan week */ const last = D().cfg.wr_last || ''; return !last || daysBetween(last, t) >= 4; }
 function wrCard() {
   if (!wrDue() || LS.getItem('wr-x-' + todayStr())) return '';
   return '<button class="card eoc" data-act="wropen"><span class="li-ic" style="background:#8b5cf6">' + ICON(B6.chat) + '</span><span><b>Your week review</b><span class="mut small">3 quick questions, then I tune next week</span></span><span class="chev">›</span></button>';
@@ -327,9 +327,12 @@ function fatigueSignals() {
 }
 const deloadCheck0 = deloadCheck;
 deloadCheck = function () {
-  const a = deloadCheck0(); if (a) return a;
   const c = D().cfg, t = todayStr(), since = c.last_deload || c.program_start || '';
-  if (!since || LS.getItem('deload-dis') > dateAdd(t, -7) || D().overrides.some((o) => o.date >= t && /deload|ease|sick|post race/.test(o.reason || ''))) return null;
+  // never suggest a lighter week while one is already set, or around a break, comeback, illness or race
+  if (D().overrides.some((o) => o.date >= dateAdd(t, -7) && /deload|ease|sick|post race|race taper|break|comeback/.test(o.reason || ''))) return null;
+  if (missedWeek()) return null; // missed most of last week: ease back in, not a deload
+  const a = deloadCheck0(); if (a) return a;
+  if (!since || LS.getItem('deload-dis') > dateAdd(t, -7)) return null;
   const weeks = Math.floor(daysBetween(since, t) / 7), on = fatigueSignals().filter((s) => s[1] === true);
   return weeks >= 2 && on.length >= 3 ? { weeks, why: on.map((s) => s[0].toLowerCase() + ': ' + s[2]) } : null;
 };
