@@ -84,9 +84,9 @@ function offBody() {
 /* ======================= break + comeback ======================= */
 const BRWHY = [['holiday', 'Holiday'], ['travel', 'Travel'], ['busy', 'Busy period'], ['ill', 'Illness'], ['injury', 'Injury'], ['tired', 'Burned out']];
 function breakPlan(B) {
-  const n = Math.max(1, Math.min(28, Number(B.days) || 1)), end = dateAdd(B.from, n - 1), ph = n <= 3 ? [[2, 'ease']] : n <= 7 ? [[3, 'deload'], [4, 'ease']] : n <= 14 ? [[7, 'deload'], [7, 'ease']] : [[7, 'deload'], [7, 'deload'], [7, 'ease']];
+  const n = Math.max(1, Math.min(28, daysBetween(B.from, B.to) + 1)), end = B.to, ph = n <= 3 ? [[2, 'ease']] : n <= 7 ? [[3, 'deload'], [4, 'ease']] : n <= 14 ? [[7, 'deload'], [7, 'ease']] : [[7, 'deload'], [7, 'deload'], [7, 'ease']];
   const shift = B.mode === 'pause' && n >= 5 ? Math.max(1, Math.round(n / 7)) * 7 : 0, back = [];
-  let d = dateAdd(end, 1);
+  let d = dateAdd(end, 1) > todayStr() ? dateAdd(end, 1) : todayStr();
   ph.forEach(([days, lv]) => { for (let i = 0; i < days; i++, d = dateAdd(d, 1)) back.push([d, lv]); });
   return { n, end, shift, back };
 }
@@ -100,7 +100,8 @@ function breakBody() {
   const dur = { holiday: 'Walk every day, swim or play if you can. Bodyweight 20 min every 2-3 days keeps your strength.', travel: 'Hotel-room bodyweight sessions (20 min) or walks. Protein at every meal.', busy: 'Two 20-minute bodyweight or KB sessions a week keep almost all your fitness.', ill: 'Full rest until symptoms are gone. Walks only if above the neck.', injury: 'Train what does not hurt. Keep your rehab sessions. See your physio before coming back.', tired: 'Real rest: sleep, walks, mobility. No hard training at all.' }[B.why] || 'Walk daily, sleep well, keep protein high.';
   const ln = (ds, lv) => { const s = breakSes(ds, P.shift); if (!s || s.p.load === 'Rest') return ''; return '<div class="li"><span class="li-main"><b>' + esc(niceDate(ds)) + '</b><span class="mut small">' + esc(s.p.session) + '</span></span><span class="li-end"><span class="tag ' + (lv === 'deload' ? 'recovery' : 'moderate') + '">' + (lv === 'deload' ? '60%' : '80%') + '</span></span></div>'; };
   return '<p class="mut small">Rest days, then a comeback that builds you back up so you don’t start too heavy.</p>' +
-    '<div class="row two"><div><label class="mut small" for="brf">First rest day</label><input type="date" id="brf" value="' + esc(B.from) + '"></div><div><label class="mut small" for="brn">Days off</label><input type="number" id="brn" inputmode="numeric" min="1" max="28" value="' + esc(B.days) + '"></div></div>' +
+    '<div class="row two"><div><label class="mut small" for="brf">From</label><input type="date" id="brf" min="' + dateAdd(todayStr(), -30) + '" value="' + esc(B.from) + '"></div><div><label class="mut small" for="brt">To</label><input type="date" id="brt" min="' + esc(B.from) + '" max="' + dateAdd(B.from, 27) + '" value="' + esc(B.to) + '"></div></div>' +
+    '<p class="mut small">' + P.n + ' day' + (P.n > 1 ? 's' : '') + ' off' + (B.from < todayStr() ? ' · past days are saved as rest, the comeback starts ' + (P.back.length ? esc(niceDate(P.back[0][0])) : 'now') : '') + '. Up to 28 days, back to 30 days ago.</p>' +
     '<p class="lbl">Why?</p><div class="chiprow">' + BRWHY.map(([k, l]) => '<button class="chip' + (B.why === k ? ' on' : '') + '" aria-pressed="' + (B.why === k) + '" data-act="brwhy" data-k="' + k + '">' + l + '</button>').join('') + '</div>' +
     (P.n >= 5 ? '<p class="lbl">Your program</p><div class="segc" role="group" aria-label="Program"><button class="' + (B.mode === 'keep' ? 'on' : '') + '" aria-pressed="' + (B.mode === 'keep') + '" data-act="brmode" data-k="keep">Keep the dates</button><button class="' + (B.mode === 'pause' ? 'on' : '') + '" aria-pressed="' + (B.mode === 'pause') + '" data-act="brmode" data-k="pause">Pause it</button></div><p class="mut small">' + (B.mode === 'pause' ? 'You continue where you stopped: the program moves ' + P.shift / 7 + ' week' + (P.shift > 7 ? 's' : '') + ' later.' : 'Missed sessions are skipped and you rejoin the calendar.') + (raceSoon ? ' ' + esc(ev.name) + ' is in ' + daysBetween(todayStr(), ev.date) + ' days, so keeping the dates is safer.' : '') + '</p>' : '') +
     '<p class="lbl">During the break</p><p class="small">' + esc(dur) + '</p>' +
@@ -124,10 +125,10 @@ function choicesCard() {
 /* ======================= actions ======================= */
 COACH_KEEP.push('offwhy', 'offmove', 'brwhy', 'brmode', 'recacc', 'recrej');
 document.addEventListener('change', (ev) => {
-  if (!S.brk || (ev.target.id !== 'brf' && ev.target.id !== 'brn')) return;
-  const f = $('#brf').value, n = Number($('#brn').value);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(f) && f >= todayStr()) S.brk.from = f;
-  if (n >= 1 && n <= 28) S.brk.days = Math.round(n);
+  if (!S.brk || (ev.target.id !== 'brf' && ev.target.id !== 'brt')) return;
+  const f = $('#brf').value, t = $('#brt').value, B = S.brk, ok = (x) => /^\d{4}-\d{2}-\d{2}$/.test(x);
+  if (ev.target.id === 'brf' && ok(f)) { if (f < dateAdd(todayStr(), -30)) toast('Up to 30 days back'); else { const len = daysBetween(B.from, B.to); B.from = f; B.to = dateAdd(f, len); } }
+  if (ev.target.id === 'brt' && ok(t)) { if (t < B.from) toast('The end must be after the start'); else if (daysBetween(B.from, t) > 27) { toast('Up to 28 days'); B.to = dateAdd(B.from, 27); } else B.to = t; }
   clearTimeout(S.brkT); S.brkT = setTimeout(() => { if (document.querySelector('.modal.info')) keepScroll('brk', breakBody()); }, 50);
 });
 Object.assign(COACH_ACTS, {
@@ -148,16 +149,16 @@ Object.assign(COACH_ACTS, {
     decide('rest day', s0 ? s0.p.session : '', O.move === 'move' ? 'moved' : 'accepted', O.why);
     closeSheets(); toast(O.move === 'move' ? 'Rest today. ' + s0.p.session + ' moved to ' + niceDate(free) + '.' : 'Rest today. Enjoy it.', 3500);
   },
-  breakopen: () => { const ev = nextRace(); S.brk = { from: todayStr(), days: 7, why: '', mode: ev && daysBetween(todayStr(), ev.date) <= 42 ? 'keep' : 'pause' }; infoSheet('Plan a break', breakBody(), 'brk'); },
+  breakopen: () => { const ev = nextRace(); S.brk = { from: todayStr(), to: dateAdd(todayStr(), 6), why: '', mode: ev && daysBetween(todayStr(), ev.date) <= 42 ? 'keep' : 'pause' }; infoSheet('Plan a break', breakBody(), 'brk'); },
   brwhy: (el) => { S.brk.why = el.dataset.k; keepScroll('brk', breakBody()); },
   brmode: (el) => { S.brk.mode = el.dataset.k; keepScroll('brk', breakBody()); },
   brgo: () => {
     const B = S.brk, P = breakPlan(B); if (!B.why) return;
-    if (!confirm(P.n + ' days off from ' + niceDate(B.from) + ', then a ' + P.back.length + '-day comeback. OK?')) return;
+    if (!confirm(P.n + ' days off, ' + niceDate(B.from) + ' to ' + niceDate(P.end) + ', then a ' + P.back.length + '-day comeback. OK?')) return;
     if (P.shift) setCfg('program_start', dateAdd(D().cfg.program_start, P.shift));
-    for (let i = 0; i < P.n; i++) { const ds = dateAdd(B.from, i); send({ action: 'log', table: 'Overrides', row: { date: ds, session: 'Break: rest', load: 'Rest', time: '09:00', daytype: 'sat', details: '# Break day\n- Walk 20-40 min if you feel like it\n- Sleep, water, protein', reason: 'break: ' + B.why } }); }
+    for (let i = 0; i < P.n; i++) { const ds = dateAdd(B.from, i); if (logs('WorkoutLog', ds).some((x) => x.status === 'done')) continue; send({ action: 'log', table: 'Overrides', row: { date: ds, session: 'Break: rest', load: 'Rest', time: '09:00', daytype: 'sat', details: '# Break day\n- Walk 20-40 min if you feel like it\n- Sleep, water, protein', reason: 'break: ' + B.why } }); }
     let n = 0; P.back.forEach(([ds, lv]) => { const s = sessionFor0(ds), L = s && comeback(s.p, lv); if (L) { send({ action: 'log', table: 'Overrides', row: Object.assign({ date: ds, reason: 'comeback' }, L) }); n++; } });
-    decide('break', P.n + ' days from ' + B.from + (P.shift ? ', program paused' : ''), 'accepted', B.why);
+    decide('break', P.n + ' days, ' + B.from + ' to ' + P.end + (P.shift ? ', program paused' : ''), 'accepted', B.why);
     closeSheets(); toast(P.n + ' days off set. Comeback: ' + n + ' lighter sessions after.', 4000);
   }
 });
