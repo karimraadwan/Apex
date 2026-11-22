@@ -270,3 +270,10 @@ h1.v2h1{font-size:1.75rem}
 .v2whd{margin-top:var(--s2);border:1px solid var(--v2line);border-radius:14px;padding:10px 14px}
 .v2whd summary{cursor:pointer;font-weight:600;min-height:44px;display:flex;align-items:center}
 .v2whpre{white-space:pre-wrap;word-break:break-word;font:500 .78rem/1.45 ui-monospace,Menlo,monospace;color:var(--v2tx);max-height:300px;overflow:auto;margin:8px 0 0}
+.v2ill.done{border-color:rgba(74,222,155,.45)}
+.v2ill.done .v2ses-h .v2lbl{color:var(--v2ok)}
+.v2eased{color:var(--v2ok);font-weight:700;display:inline-flex;align-items:center;gap:3px}
+.v2eased .gi{width:14px;height:14px}
+.v2ses.flash{animation:v2flash 1.6s ease-out 1}
+@keyframes v2flash{0%{box-shadow:0 0 0 3px var(--v2ok)}100%{box-shadow:0 0 0 3px transparent}}
+@media (prefers-reduced-motion:reduce){.v2ses.flash{animation:none;box-shadow:0 0 0 2px var(--v2ok)}}

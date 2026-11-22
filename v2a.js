@@ -141,7 +141,8 @@ function sessionCard(ds, ses) {
   }
   if (wl && wl.status === 'skipped') return '<section class="v2card v2ses"><span class="v2tag rest">SKIPPED</span><h2 class="v2h2">' + esc(ses.name) + '</h2><div class="v2row2"><button class="v2btn2" data-act="wundo">Undo</button></div></section>';
   const K = sesKind(ses.name, load);
-  return '<section class="v2card v2ses"><div class="v2ses-h">' + gtile(K[0], K[1]) + '<div class="v2grow"><span class="v2lbl">Today\'s session · ' + esc(p.time || '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2><span class="v2mut">' + (mins ? 'About ' + mins + ' min · ' : '') + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + (ses.injured ? ' · ' + ses.injured + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) : '') + '</span></div>' + v2tag(load) + '</div>' +
+  const eased = /recommended: easier/.test(p.reason || ''), fl = S.eased && S.eased.ds === ds && Date.now() - S.eased.t < 5000;
+  return '<section class="v2card v2ses' + (fl ? ' flash' : '') + '"><div class="v2ses-h">' + gtile(K[0], K[1]) + '<div class="v2grow"><span class="v2lbl">Today\'s session · ' + esc(p.time || '') + (eased ? ' · <span class="v2eased">' + gi('check') + 'Made easier</span>' : '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2><span class="v2mut">' + (mins ? 'About ' + mins + ' min · ' : '') + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + (ses.injured ? ' · ' + ses.injured + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) : '') + '</span></div>' + v2tag(load) + '</div>' +
     '<div class="v2row2"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="v2change">Change</button></div>' +
     '<button class="v2link" data-act="v2go" data-sub="session" data-d="' + ds + '">See all exercises and reels ›</button></section>';
 }
@@ -286,7 +287,7 @@ Object.assign(COACH_ACTS, {
   v2chggo: () => {
     const C = S.chg, ds = C.ds, s0 = sessionFor0(ds); if (!s0 || !C.opt) return;
     const why = C.why || 'tired';
-    if (C.opt === 'light') { const L = lighten(s0.p, 'ease'); if (!L) { toast('Nothing to make lighter'); return; } send({ action: 'log', table: 'Overrides', row: Object.assign({ date: ds, reason: 'recommended: easier' }, L) }); decide('change today', s0.p.session, 'lighter', why); closeSheets(); toast('Lighter session set for today.'); return; }
+    if (C.opt === 'light') { const cur = D().overrides.find((o) => o.date === ds); if (cur && /recommended: easier/.test(cur.reason || '')) { closeSheets(); toast('This day is already the easier version.'); return; } const L = lighten(s0.p, 'ease'); if (!L) { toast('Nothing to make lighter'); return; } try { LS.setItem('ease-prev-' + ds, JSON.stringify(cur || null)); } catch (e) { /* storage full */ } S.eased = { ds, t: Date.now() }; send({ action: 'log', table: 'Overrides', row: Object.assign({ date: ds, reason: 'recommended: easier' }, L) }); decide('change today', s0.p.session, 'lighter', why); closeSheets(); toast('Lighter session set.'); setTimeout(() => { const c = document.querySelector('.v2ses.flash'); if (c) c.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); }, 60); return; }
     if (C.opt === 'short') { closeSheets(); COACH_ACTS.adjopen({ dataset: { m: 'short', d: ds } }); return; }
     if (C.opt === 'swap') { closeSheets(); COACH_ACTS.adjopen({ dataset: { m: 'nogym', d: ds } }); return; }
     if (C.opt === 'move' || C.opt === 'rest') { S.off = { why: { busy: 'busy', ill: 'ill', sore: 'sore', nogym: 'busy' }[why] || 'tired', move: C.opt === 'move' ? 'move' : 'skip' }; COACH_ACTS.offgo(); }

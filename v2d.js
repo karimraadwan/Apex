@@ -78,7 +78,14 @@ function illCard(ds) {
   if (illOff() || (typeof sick === 'function' && sick())) return '';
   const R = illRisk(ds); if (!R || R.level === 'ok' || LS.getItem('illx-' + ds)) return '';
   const hi = R.level === 'high', ses = sessionFor(ds), canEase = ses && ses.p && ses.p.load && ses.p.load !== 'Rest' && ses.p.load !== 'Recovery' && !logs('WorkoutLog', ds).length;
-  const top = illTips(R).slice(0, 3);
+  const top = illTips(R).slice(0, 3), ov = D().overrides.find((o) => o.date === ds), eased = ov && /recommended: easier/.test(ov.reason || '');
+  if (eased) {
+    return '<section class="v2card v2ill done" role="status"><div class="v2ses-h">' + gtile('check', 'ok') + '<div class="v2grow"><span class="v2lbl">Health watch · done</span><h2 class="v2h2">Today\'s session is easier now</h2><span class="v2mut">' + esc(ov.session) + '. One set less on each exercise, about 80% of your usual weights, runs easy.</span></div></div>' +
+      '<div class="v2chips">' + R.signals.map((s) => '<span class="v2pill' + (s.pts >= 1 ? ' bad' : '') + '">' + esc(s.txt) + '</span>').join('') + '</div>' +
+      '<p class="v2lbl">Still helps today</p><ul class="v2illtips">' + top.map((x) => '<li>' + gi(x.ic) + '<span>' + esc(x.t) + '</span></li>').join('') + '</ul>' +
+      '<div class="v2row2"><button class="v2btn2" data-act="v2go" data-sub="session" data-d="' + ds + '" style="flex:1">See session</button><button class="v2btn2" data-act="illundo" data-d="' + ds + '" style="flex:1">Undo</button></div>' +
+      '<button class="v2link" data-act="sickopen">Feeling ill? Rest instead ›</button></section>';
+  }
   return '<section class="v2card v2ill ' + (hi ? 'hi' : 'watch') + '"><div class="v2ses-h">' + gtile('heart', hi ? 'bad' : 'warm') + '<div class="v2grow"><span class="v2lbl">' + (hi ? 'Health watch · possible illness coming' : 'Health watch') + '</span><h2 class="v2h2">' + (hi ? 'Your body may be fighting something' : 'Your body is under some stress') + '</h2><span class="v2mut">' + (R.race ? 'Partly explained by yesterday\'s very hard effort. ' : '') + (hi ? 'Several signs that often show 1–3 days before a cold.' : 'Early signs, nothing alarming. Worth being careful today.') + '</span></div></div>' +
     '<div class="v2chips">' + R.signals.map((s) => '<span class="v2pill' + (s.pts >= 1 ? ' bad' : '') + '">' + esc(s.txt) + '</span>').join('') + '</div>' +
     '<p class="v2lbl">What helps today</p><ul class="v2illtips">' + top.map((x) => '<li>' + gi(x.ic) + '<span>' + esc(x.t) + '</span></li>').join('') + '</ul>' +
@@ -123,7 +130,12 @@ COACH_KEEP.push('illtog', 'illx');
 Object.assign(COACH_ACTS, {
   illx: () => { LS.setItem('illx-' + todayStr(), '1'); toast('OK. I\'ll check again tomorrow.'); render(); },
   illtog: () => { if (illOff()) LS.removeItem('illwatch-off'); else LS.setItem('illwatch-off', '1'); render(); },
-  illease: () => { const ds = todayStr(); S.chg = { ds, why: 'tired', opt: 'light' }; COACH_ACTS.v2chggo(); }
+  illease: () => { const ds = todayStr(); S.chg = { ds, why: 'tired', opt: 'light' }; COACH_ACTS.v2chggo(); },
+  illundo: (el) => {
+    const ds = el.dataset.d || todayStr(); let prev = null; try { prev = JSON.parse(LS.getItem('ease-prev-' + ds) || 'null'); } catch (e) { prev = null; }
+    if (prev && prev.date === ds) send({ action: 'log', table: 'Overrides', row: prev }); else send({ action: 'del', table: 'Overrides', row: { date: ds } });
+    LS.removeItem('ease-prev-' + ds); S.eased = null; toast('Back to the session you had before.');
+  }
 });
 
 /* ---------- Send to WHOOP (Strength Trainer) ----------
