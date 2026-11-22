@@ -1,6 +1,6 @@
 // Caches the app shell so it opens offline. API calls (script.google.com) always go to the network.
-const V = 'apex-v31';
-const SHELL = ['./', './index.html', './style.css', './coach.js', './train.js', './life.js', './batch4.js', './batch5.js', './batch6.js', './batch7.js', './batch8.js', './batch9.js', './reels.json', './app.js', './v2c.js', './v2a.js', './v2b.js', './v2.css', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const V = 'apex-v34';
+const SHELL = ['./', './index.html', './style.css', './coach.js', './train.js', './life.js', './batch4.js', './batch5.js', './batch6.js', './batch7.js', './batch8.js', './batch9.js', './reels.json', './app.js', './v2c.js', './v2d.js', './v2a.js', './v2b.js', './v2.css', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL))); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== V).map((k) => caches.delete(k)))));

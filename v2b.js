@@ -69,7 +69,7 @@ function v2session(ds) {
   let h = '<div class="v2ses-h v2stack">' + gtile(K[0], K[1]) + '<div class="v2grow"><p class="v2lbl">' + esc(niceDate(ds)) + ' · ' + esc(ses.p.time || '') + '</p><h1 class="v2h1">' + esc(ses.name) + '</h1></div></div><div class="v2chips">' + v2tag(load) + (mins ? '<span class="v2pill">About ' + mins + ' min</span>' : '') + '<span class="v2pill">' + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + '</span></div>' +
     (ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '</span></p>' : '') +
     (ses.p.moved ? '<p class="moved">' + ICON(CI.move) + '<span>Moved here ' + esc(String(ses.p.reason || '').replace(/(\d{4}-\d{2}-\d{2})/, (m) => niceDate(m))) + '</span><button class="txt fit" data-act="mvundo" data-d="' + esc(ds) + '" data-r="' + esc(ses.p.reason) + '">Undo</button></p>' : '') +
-    '<div class="v2chips"><button class="v2chip" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="v2chip" data-act="itopen" data-m="emom">Interval timer</button>' + (ds >= t ? '<button class="v2chip" data-act="v2change" data-d="' + ds + '">Change</button>' : '') + '</div>' +
+    '<div class="v2chips"><button class="v2chip" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="v2chip" data-act="itopen" data-m="emom">Interval timer</button>' + (/barbell|pull|kb|flame/.test(K[0]) || (D().sets || []).some((x) => x.date === ds) ? '<button class="v2chip" data-act="whsend" data-d="' + ds + '">' + gi('share') + 'Send to WHOOP</button>' : '') + (ds >= t ? '<button class="v2chip" data-act="v2change" data-d="' + ds + '">Change</button>' : '') + '</div>' +
     '<div class="card">' + blocksHTML(ses.details, ds) + '</div>';
   if (ds === t && !wl && load !== 'Rest') h += '<div class="v2sticky"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="wdone">Did it already</button></div>';
   return v2page('', back, h);
@@ -132,6 +132,7 @@ function viewYou2() {
   if (sub === 'profile') return v2page('', 'You', v2profile());
   if (sub === 'review') return v2page('', 'You', v2review());
   if (sub === 'body') return v2page('', 'You', v2body());
+  if (sub === 'health') return v2page('', 'You', v2health());
   if (sub === 'season') return v2page('', 'You', v2season());
   if (sub === 'shortcuts') return v2page('more', 'Settings and more', v2shortcuts());
   if (sub === 'consistency') return v2page('', 'You', v2consPage());
@@ -141,7 +142,7 @@ function viewYou2() {
   h += v2readinessBars();
   if (pr.length) h += '<section class="v2card v2grid3">' + pr.map((r) => '<button class="v2stat" data-act="prsheet" data-n="' + esc(r.name) + '">' + gi('trophy', 'gtr') + '<span class="v2lbl">' + esc(r.name) + '</span><b>' + esc(prShow(r.best ? r.best.value : r.value, r.unit || (r.best && r.best.unit))) + '</b></button>').join('') + '</section>';
   h += '<button class="v2card v2flat v2cta" data-act="v2go" data-sub="consistency">' + gdonut(C.pct / 100, '#8B7CF6', 56, 'Consistency ' + C.pct + ' percent') + '<span class="v2grow"><span class="v2lbl">Consistency · 4 weeks</span><b class="v2num">' + C.pct + '%</b><span class="v2mut">Planned rest and breaks count as done</span></span><span class="v2li-e">›</span></button>';
-  const L = [['How Apex sees you', 'Patterns from your training, food, sleep and choices', 'profile', 'face', 'vio'], ['Weekly review', 'Your week, next week\'s proposals, share as PDF', 'review', 'cal', 'blue'], ['Training and runs', 'Load, fatigue check, runs, records', 'training', 'run', 'blue'], ['Body', 'Weight, waist, weight plan, photos', 'body', 'scale', 'ok'], ['All insights', 'Recovery charts, what works for you', 'insights', 'chart', 'vio'], ['Season planner', 'Blocks between your races', 'season', 'route', 'warm'], ['Extras', 'Timer, PR planner, skills and more tools', 'extras', 'tools', 'vio'], ['Settings and more', 'Connections, races, supplements, coach, preferences', 'more', 'gear', 'mut']];
+  const L = [['How Apex sees you', 'Patterns from your training, food, sleep and choices', 'profile', 'face', 'vio'], ['Weekly review', 'Your week, next week\'s proposals, share as PDF', 'review', 'cal', 'blue'], ['Training and runs', 'Load, fatigue check, runs, records', 'training', 'run', 'blue'], ['Health watch', 'Early illness warning and how to stay healthy', 'health', 'heart', 'bad'], ['Body', 'Weight, waist, weight plan, photos', 'body', 'scale', 'ok'], ['All insights', 'Recovery charts, what works for you', 'insights', 'chart', 'vio'], ['Season planner', 'Blocks between your races', 'season', 'route', 'warm'], ['Extras', 'Timer, PR planner, skills and more tools', 'extras', 'tools', 'vio'], ['Settings and more', 'Connections, races, supplements, coach, preferences', 'more', 'gear', 'mut']];
   h += '<section class="v2card v2list">' + L.map(([t, s, sub, ic, tone]) => v2row('v2go', t, s, '', ' data-sub="' + sub + '"', ic, tone)).join('') + '</section>';
   return h;
 }

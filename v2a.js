@@ -178,7 +178,7 @@ function v2setup() {
 function viewToday2() {
   const ds = todayStr(), d = d0(), c = d.cfg, ses = sessionFor(ds), RST = restInfo(ds, ses), p = dayPlan(ds), hr = local().hour;
   let h = v2head(shortDate(ds), greeting() + (c.name ? ', ' + c.name : ''), true) + v2status(ds);
-  h += syncBanner() + tzBanner() + v2setup() + sickCard() + ramCard() + raceWeekCard() + postRaceCard() + v2heatCard(ds);
+  h += syncBanner() + tzBanner() + v2setup() + sickCard() + illCard(ds) + ramCard() + raceWeekCard() + postRaceCard() + v2heatCard(ds);
   h += readinessCard(ds, ses);
   if (RST && RST.kind === 'noplan') h += '<section class="v2card">' + GILL.plan + '<span class="v2tag none">NO PROGRAM YET</span><h2 class="v2h2">Nothing planned</h2><span class="v2mut">Tell Apex your goals and which days you can train. It builds your weeks from your documents and saved reels.</span><button class="v2btn wide" data-act="wizopen">Create my program</button></section>';
   else if (RST && RST.kind !== 'recovery') h += restCard(ds, ses, RST) + restDayCard();
@@ -258,7 +258,7 @@ function liveDraw() { const b = $('#v2live'); if (b) b.innerHTML = liveHTML(); }
 function liveFinish(partial) {
   const L = S.live; if (!L) return;
   restStop();
-  if (L.done) send({ action: 'log', table: 'WorkoutLog', row: { date: L.ds, session: L.ses, status: 'done', note: partial ? 'partial: ' + L.done + ' sets' : 'live', time: nowTime(), rpe: '', energy: '' } });
+  if (L.done) send({ action: 'log', table: 'WorkoutLog', row: { date: L.ds, session: L.ses, status: 'done', note: (partial ? 'partial: ' + L.done + ' sets' : 'live') + ' · ' + Math.max(1, Math.round((Date.now() - L.t0) / 60000)) + ' min · start ' + new Date(L.t0).toTimeString().slice(0, 5), time: nowTime(), rpe: '', energy: '' } });
   const b = $('#v2live'); if (b) b.remove();
   S.live = null; render(); toast(L.done ? (partial ? 'Saved as partly done: ' + L.done + ' sets.' : 'Session done. ' + L.done + ' sets logged.') : 'Nothing logged.');
 }
@@ -266,7 +266,7 @@ function liveFinish(partial) {
 /* ---------- actions ---------- */
 COACH_KEEP.push('v2w', 'v2sore', 'v2chg', 'v2lv', 'mate', 'mskip');
 Object.assign(COACH_ACTS, {
-  v2go: (el) => { S.sub = el.dataset.sub || null; if (el.dataset.d) S.subDay = el.dataset.d; if (!S.sub) S.subDay = null; render(); window.scrollTo(0, 0); },
+  v2go: (el) => { if (el.dataset.tab) S.tab = el.dataset.tab; S.sub = el.dataset.sub || null; if (el.dataset.d) S.subDay = el.dataset.d; if (!S.sub) S.subDay = null; render(); window.scrollTo(0, 0); },
   v2rpe: (el) => { const ds = todayStr(), ses = sessionFor(ds), wl = ses && logs('WorkoutLog', ds).find((r) => r.session === ses.name); if (!wl) return; send({ action: 'log', table: 'WorkoutLog', row: Object.assign({}, wl, { rpe: el.dataset.v }) }); },
   v2wrap: () => { S.wrap = { mood: '', stress: '', coffee: false, alcohol: false, late: false, sore: {} }; infoSheet('Wrap up your day', wrapBody(), 'wrap'); },
   v2w: (el) => { const W = S.wrap, k = el.dataset.k; if (['coffee', 'alcohol', 'late'].includes(k)) W[k] = !W[k]; else W[k] = W[k] === el.dataset.v ? '' : el.dataset.v; keepScroll('wrap', wrapBody()); },
