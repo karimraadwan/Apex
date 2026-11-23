@@ -33,7 +33,8 @@ function illRisk(ds) {
   if (hrv != null && B.hrv != null) {
     const h3 = [dateAdd(ds, -2), dateAdd(ds, -1), ds].map((d) => { const x = whoopFor(d); return x ? illNum(x.hrv) : null; }).filter((x) => x != null), a3 = h3.length === 3 ? h3.reduce((a, x) => a + x, 0) / 3 : null;
     if (hrv <= B.hrv * 0.8) add('hrv', 1, 'HRV ' + Math.round(hrv) + ', normal ' + Math.round(B.hrv));
-    else if (hrv <= B.hrv * 0.9 || (a3 != null && a3 <= B.hrv * 0.93)) add('hrv', 0.5, 'HRV ' + Math.round(hrv) + (a3 != null && hrv > B.hrv * 0.9 ? ', low 3 days' : '') + ', normal ' + Math.round(B.hrv));
+    else if (hrv <= B.hrv * 0.9) add('hrv', 0.5, 'HRV ' + Math.round(hrv) + ', normal ' + Math.round(B.hrv));
+    else if (a3 != null && a3 <= B.hrv * 0.93 && hrv < B.hrv) add('hrv', 0.5, 'HRV low 3 days, average ' + Math.round(a3) + ' vs normal ' + Math.round(B.hrv));
   }
   // skin temperature
   if (skin != null && B.skin != null && skin >= B.skin + 1) add('skin', 1, 'Skin temp +' + (skin - B.skin).toFixed(1) + '°C');
@@ -41,7 +42,7 @@ function illRisk(ds) {
   // blood oxygen
   if (spo2 != null && (spo2 < 94 || (B.spo2 != null && spo2 <= B.spo2 - 2))) add('spo2', 1, 'Blood oxygen ' + spo2.toFixed(1) + '%');
   // sleep
-  if ((sh != null && sh < 6.5) || (sp != null && sp < 75)) add('sleep', 0.5, sh != null && sh < 6.5 ? 'Slept ' + Math.floor(sh) + ' h ' + String(Math.round((sh % 1) * 60)).padStart(2, '0') : 'Sleep quality ' + sp + '%');
+  if ((sh != null && sh < 6.5) || (sp != null && sp < 75)) add('sleep', 0.5, sh != null && sh < 6.5 ? 'Slept ' + hmOf(sh) : 'Sleep quality ' + sp + '%');
   // a very hard day yesterday explains a lot of this
   const y = whoopFor(dateAdd(ds, -1)), race = !!(y && Number(y.strain) >= 18);
   let level = score >= 2 ? 'high' : score >= 1 ? 'watch' : 'ok';
@@ -115,10 +116,10 @@ function v2health() {
     const L = R.level, col = L === 'high' ? 'bad' : L === 'watch' ? 'warm' : 'ok';
     h += '<section class="v2card v2flat">' + gtile(L === 'ok' ? 'check' : 'heart', col) + '<div class="v2grow"><span class="v2lbl">Today</span><b class="v2num">' + (L === 'high' ? 'Possible illness coming' : L === 'watch' ? 'Some stress showing' : 'All normal') + '</b><span class="v2mut">' + (R.signals.length ? R.signals.map((s) => esc(s.txt)).join(' · ') : 'Resting HR, HRV, skin temperature and blood oxygen are all in your normal range.') + (R.race ? ' · yesterday was a very hard day' : '') + '</span></div></section>';
     h += '<p class="v2lbl">Last 14 days vs your normal</p><section class="v2card v2list">' +
-      illMetric('Resting heart rate', '', 'rhr', B.rhr, illNum(w.rhr), false, '#FF7A6E') +
-      illMetric('HRV', ' ms', 'hrv', B.hrv, illNum(w.hrv), true, '#8B7CF6') +
-      illMetric('Skin temperature', '°', 'skin_temp', B.skin, illNum(w.skin_temp), false, '#F5B83D', 1) +
-      illMetric('Blood oxygen', '%', 'spo2', B.spo2, illNum(w.spo2), true, '#5AB0FF', 1) + '</section>';
+      illMetric('Resting heart rate', '', 'rhr', B.rhr, illNum(w.rhr), false, 'var(--v2bad)') +
+      illMetric('HRV', ' ms', 'hrv', B.hrv, illNum(w.hrv), true, 'var(--v2vio)') +
+      illMetric('Skin temperature', '°', 'skin_temp', B.skin, illNum(w.skin_temp), false, 'var(--v2warn)', 1) +
+      illMetric('Blood oxygen', '%', 'spo2', B.spo2, illNum(w.spo2), true, 'var(--v2ok)', 1) + '</section>';
   }
   h += '<p class="v2lbl">How to stay healthy</p><section class="v2card v2list">' + illTips(R).map(illTipRow).join('') + '</section>';
   h += '<section class="v2card"><h2 class="v2h2">See a doctor if</h2><span class="v2mut">You have a fever, chest pain, trouble breathing, a racing heart at rest, or your numbers stay off for more than 3 days. Don\'t train through a fever.</span></section>';

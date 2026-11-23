@@ -190,9 +190,9 @@ h1.v2h1{font-size:1.75rem}
 .v2st{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border-radius:999px;background:var(--card);font-size:.75rem;font-weight:600;color:var(--v2mut)}
 .v2st i{width:7px;height:7px;border-radius:50%;background:var(--v2ok)}
 .v2st.plan{color:var(--v2vio);background:var(--v2vioT)}
-.v2st.busy i{background:var(--v2vio);animation:pulse 1.2s ease-in-out infinite}
+.v2st.busy i{background:var(--v2vio);animation:v2pulse 1.2s ease-in-out infinite}
 .v2st.bad{color:var(--v2bad)}.v2st.bad i{background:var(--v2bad)}
-@keyframes pulse{50%{opacity:.3}}
+@keyframes v2pulse{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){.v2st.busy i,.v2icb.busy svg{animation:none}}
 /* plan */
 .v2block{gap:var(--s3)}
@@ -277,3 +277,17 @@ h1.v2h1{font-size:1.75rem}
 .v2ses.flash{animation:v2flash 1.6s ease-out 1}
 @keyframes v2flash{0%{box-shadow:0 0 0 3px var(--v2ok)}100%{box-shadow:0 0 0 3px transparent}}
 @media (prefers-reduced-motion:reduce){.v2ses.flash{animation:none;box-shadow:0 0 0 2px var(--v2ok)}}
+/* audit 23 Nov */
+.v2race .v2li-t{min-width:0;flex:1}.v2race .v2li-t b{overflow-wrap:anywhere}
+.v2race>.v2num{flex:0 1 auto;max-width:48%;white-space:normal}
+@media (prefers-color-scheme:light){.v2cal .c-d{color:#fff}}
+/* chart entrance: draw once when a screen opens (the global reduced-motion rule turns these off) */
+@keyframes gdraw{from{stroke-dasharray:0 1000}}
+@keyframes gline{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+@keyframes gfill{from{transform:translateY(60px)}}
+@keyframes ggrow{from{transform:scaleY(0)}}
+#app.enter .gprog{animation:gdraw 1s .2s var(--ease) both}
+#app.enter .gline{stroke-dasharray:1;animation:gline .9s .25s var(--ease) both}
+#app.enter .gfill{animation:gfill .9s .2s var(--ease) both}
+#app.enter .v2bars i{transform-origin:bottom;animation:ggrow .6s var(--ease) both}
+#app.enter .v2bars i:nth-child(n+5){animation-delay:.05s}#app.enter .v2bars i:nth-child(n+10){animation-delay:.1s}

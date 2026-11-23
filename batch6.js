@@ -252,7 +252,10 @@ const RESTO = {
 function restPick() {
   const t = todayStr(), w = whoopFor(t), rec = w && Number(w.recovery), L = loadBalance(), y = sessionFor0(dateAdd(t, -1)), y2 = sessionFor0(dateAdd(t, -2));
   if ((rec && rec < 40) || L.ratio > 1.3 || sick()) return ['rest', rec && rec < 40 ? 'Recovery is ' + rec + '%' : L.ratio > 1.3 ? 'Your load is high this week' : 'You\u2019re ill'];
-  if ([y, y2].filter((s) => s && s.p.load === 'Hard').length >= 2) return ['mob', 'Two hard days behind you'];
+  let ir = null; try { ir = typeof illRisk === 'function' && !illOff() ? illRisk(t) : null; } catch (e) { ir = null; }
+  if (ir && ir.level === 'high') return ['rest', 'Your body may be fighting something'];
+  const didHard = (s, d) => s && s.p.load === 'Hard' && logs('WorkoutLog', d).some((r) => r.status === 'done');
+  if (didHard(y, dateAdd(t, -1)) && didHard(y2, dateAdd(t, -2))) return ['mob', 'Two hard days behind you'];
   return ['walk', rec ? 'Recovery ' + rec + '%: easy movement helps' : 'Easy movement helps you recover'];
 }
 function restDayCard() {

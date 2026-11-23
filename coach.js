@@ -153,7 +153,7 @@ function prsSection() {
   h += rows.map((r) => '<button class="li" data-act="prsheet" data-n="' + esc(r.name) + '"><span class="li-ic" style="background:#f59e0b">' + ICON(CI.trophy) + '</span><span class="li-main"><b>' + esc(r.name) + '</b><span class="mut small">' + esc(niceDate(r.best.date)) + (r.prev ? ' · before: ' + prShow(r.prev.value, r.unit) : '') + '</span></span><span class="li-end">' + (r.isNew ? '<span class="pill keep">NEW</span> ' : '') + '<b class="pr-v">' + prShow(r.best.value, r.unit) + '</b><span class="chev">›</span></span></button>').join('');
   h += auto.map((x) => '<div class="li"><span class="li-ic" style="background:#fc4c02">' + ICON(I.run) + '</span><span class="li-main"><b>' + esc(x[0]) + '</b><span class="mut small">Strava · ' + esc(niceDate(x[2].date)) + '</span></span><span class="li-end"><b class="pr-v">' + esc(x[1]) + '</b></span></div>').join('');
   if (!rows.length && !auto.length) h += '<p class="empty-note">No records yet. Log your first one below.</p>';
-  return h + row({ act: 'prlog', ic: I.plus, bg: 'var(--accFill)', t: 'Log a record', cls: 'add' }) + '</div>' + (auto.length ? '<p class="foot">Strava records use your synced runs (last 14 days).</p>' : '');
+  return h + row({ act: 'prlog', ic: I.plus, bg: 'var(--accFill)', t: 'Log a record', cls: 'add' }) + '</div>' + (auto.length ? '<p class="foot">Strava records use your synced runs from the last 4 months.</p>' : '');
 }
 function prCelebrate() {
   const r = prRows().find((x) => x.isNew && daysBetween(x.best.date, todayStr()) <= 2);

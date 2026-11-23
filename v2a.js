@@ -24,7 +24,7 @@ function readiness(ds) {
     s = Number(w.recovery); why.push('Recovery ' + s + '%');
     const past = D().whoop.filter((x) => x.date < ds && Number(x.hrv) > 0).slice(-30), hb = past.length >= 5 ? past.reduce((a, x) => a + Number(x.hrv), 0) / past.length : 0, hrv = Number(w.hrv);
     if (hb && hrv) { if (hrv < hb * 0.85) { s -= 6; why.push('HRV ' + Math.round(hrv) + ', below your normal'); } else if (hrv > hb * 1.05) why.push('HRV ' + Math.round(hrv) + ', above your normal'); }
-    const sh = Number(w.sleep_hours); if (sh) { if (sh < 6) { s -= 6; } why.push('slept ' + Math.floor(sh) + ' h ' + String(Math.round((sh % 1) * 60)).padStart(2, '0')); }
+    const sh = Number(w.sleep_hours); if (sh) { if (sh < 6) { s -= 6; } why.push('slept ' + hmOf(sh)); }
   } else {
     const ck = logs('Checkin', ds).find((c) => c.feel);
     if (!ck) return null;
@@ -34,13 +34,13 @@ function readiness(ds) {
   const sore = (D().soreness || []).filter((x) => x.date >= dateAdd(ds, -1) && x.date <= ds && Number(x.level) >= 2);
   if (sore.length) { s -= 5; why.push('sore ' + sore.map((x) => x.area).join(', ')); }
   s = Math.max(1, Math.min(99, Math.round(s)));
-  const k = s >= 67 ? ['ready', 'READY', '#4ADE9B'] : s >= 34 ? ['light', 'GO LIGHTER', '#F5B83D'] : ['rest', 'REST TODAY', '#FF7A6E'];
+  const k = s >= 67 ? ['ready', 'READY', 'var(--v2ok)'] : s >= 34 ? ['light', 'GO LIGHTER', 'var(--v2warn)'] : ['rest', 'REST TODAY', 'var(--v2bad)'];
   return { score: s, kind: k[0], word: k[1], color: k[2], why, src: hasRec ? 'whoop' : 'feel' };
 }
 function v2ring(score, color, size) {
   size = size || 88; const r = size / 2 - 6, c = 2 * Math.PI * r, f = score == null ? 0 : score / 100;
   return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" role="img" aria-label="' + (score == null ? 'No readiness score yet' : 'Readiness ' + score + ' out of 100') + '"><circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="var(--v2line)" stroke-width="8"/>' +
-    (score == null ? '' : '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 ' + size / 2 + ' ' + size / 2 + ')"/>') +
+    (score == null ? '' : '<circle class="gprog" cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="8" stroke-linecap="round" stroke-dasharray="' + (c * f).toFixed(1) + ' ' + c.toFixed(1) + '" transform="rotate(-90 ' + size / 2 + ' ' + size / 2 + ')"/>') +
     '<text x="50%" y="54%" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-family="Space Grotesk,Inter,sans-serif" font-size="' + Math.round(size * 0.3) + '" font-weight="700">' + (score == null ? '--' : score) + '</text></svg>';
 }
 function readinessCard(ds, ses) {
@@ -53,7 +53,10 @@ function readinessCard(ds, ses) {
   let head;
   if (RST && RST.kind !== 'recovery') head = R.score >= 67 ? 'Enjoy the rest. An easy walk is fine.' : R.score >= 34 ? 'Take it easy today.' : 'Your body needs this. Sleep early tonight.';
   else if (RST && RST.kind === 'recovery') head = 'Easy day, keep it gentle';
-  else head = R.kind === 'ready' ? 'Push the top set today' : R.kind === 'light' ? 'Go a bit lighter today' : 'Your body is asking for a day off';
+  else {
+    const sp = (sessionFor(ds) || {}).p || {}, easy = /comeback|easing|recommended: easier/.test(sp.reason || '') || /\((?:comeback|easing in|easy)\)/.test(sp.session || '');
+    head = R.kind === 'ready' ? (easy ? 'Ready. Keep to today\'s lighter weights' : 'Push the top set today') : R.kind === 'light' ? 'Go a bit lighter today' : 'Your body is asking for a day off';
+  }
   const word = RST && RST.kind !== 'recovery' ? 'REST DAY' : R.word;
   const wk = [6, 5, 4, 3, 2, 1, 0].map((i) => { const r = i ? readiness(dateAdd(ds, -i)) : R; return r ? r.score : null; });
   return '<section class="v2card v2ready k-' + R.kind + '"><div class="v2ready-r" style="color:var(--v2tx)">' + v2ring(R.score, R.color) + '</div><div class="v2ready-t"><span class="v2tag ' + R.kind + '">' + word + '</span><b>' + esc(head) + '</b><span class="v2mut">' + esc(R.why.join(' · ')) + '</span>' + (wk.filter((x) => x != null).length >= 3 ? '<span class="v2sparkrow">' + gspark(wk, R.color, 120, 28) + '<span class="v2mut">7 days</span></span>' : '') + '</div></section>';

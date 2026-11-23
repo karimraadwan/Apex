@@ -142,6 +142,19 @@ async function load(sync) {
   }
   S.busy = false; render();
 }
+/* Protein estimate from a meal's written items, used when the Meals sheet has no protein number.
+   grams per 100 g (cooked unless the line says raw), or grams per piece. */
+const PROT_100 = [[/egg whites?/, 0, 3.6], [/\beggs?\b/, 0, 6.3], [/whey|protein powder/, 80, 24], [/scoops?/, 0, 24], [/cottage cheese/, 11], [/greek yo(?:g|gh)urt/, 10, 17], [/yo(?:g|gh)urt/, 4, 6], [/ground beef|minced beef|mince/, 20], [/ribeye|steak|beef|lamb|veal/, 26], [/chicken|turkey/, 31, 0, 23], [/tuna/, 26, 25], [/salmon/, 22, 0, 20], [/shrimps?|prawns?/, 24], [/fish|tilapia|seabass|sea bass|fillet/, 22, 0, 20], [/lentils?|beans|chickpeas?|hummus/, 8], [/oats/, 13], [/quinoa/, 4.4], [/rice/, 2.7], [/pasta|noodles/, 5.5], [/bread|toast|pita/, 9], [/potato(?:es)?/, 2], [/nuts|almonds?|cashews?|walnuts?/, 20], [/peanut butter/, 25], [/cheese/, 25], [/milk/, 3.4], [/bone marrow soup|bone broth|soup/, 0, 5], [/salad|veg(?:etables?|gies)?/, 0, 2]];
+function protEst(items) {
+  let tot = 0;
+  String(items || '').toLowerCase().split(/\s*\+\s*|,\s*|\s+and\s+|\s+with\s+/).forEach((part) => {
+    const f = PROT_100.find((x) => x[0].test(part)); if (!f) return;
+    const g = part.match(/(\d+(?:\.\d+)?)\s*(?:g|gr|grams?)\b/), n = part.match(/^\s*(\d+(?:\.\d+)?)\s*(?!g\b|gr\b|grams?\b|ml\b)/), raw = /\braw\b/.test(part) && f[3];
+    if (g) tot += Number(g[1]) * (raw ? f[3] : f[1]) / 100;
+    else if (f[2]) tot += f[2] * (n ? Number(n[1]) : 1);
+  });
+  return Math.round(tot);
+}
 function normalize(d) {
   const byDate = (a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   d.whoop.sort(byDate); d.strava.sort(byDate); // B1: never trust row order
@@ -149,6 +162,7 @@ function normalize(d) {
   d.verdicts = d.verdicts || []; d.docs = d.docs || []; d.interests = d.interests || []; d.library = d.library || [];
   d.feedback = d.feedback || []; d.prs = d.prs || []; d.programs = d.programs || []; d.overrides = d.overrides || []; d.ai = !!d.ai;
   ['sets', 'supps', 'sport', 'hyrox', 'injuries', 'habits', 'photos', 'goals', 'shopweek', 'skills', 'shoes', 'mobility'].forEach((k) => { d[k] = d[k] || []; }); d.stats = d.stats || {}; d.hist = d.hist || {}; ['mealalts', 'stock', 'memory', 'knowledge', 'decisions'].forEach((k) => { d[k] = d[k] || []; });
+  (d.meals || []).forEach((m) => { if (m.protein === '' || m.protein == null || isNaN(Number(m.protein))) { m.protein = String(protEst(m.items)); m.protEst = true; } });
   return d;
 }
 
@@ -283,10 +297,10 @@ const wUnit = () => (['L', 'ml', 'oz'].indexOf(D().cfg.water_unit) >= 0 ? D().cf
 // ml -> number in the chosen unit, and formatted text
 function wNum(ml, u) { u = u || wUnit(); return u === 'L' ? ml / 1000 : u === 'oz' ? ml / OZ : ml; }
 function wDec(u, big) { u = u || wUnit(); return u === 'L' ? (big ? 2 : 1) : 0; }
-function wFmt(ml, u, dec) { u = u || wUnit(); const d = dec === undefined ? wDec(u) : dec; return wNum(ml, u).toFixed(d) + ' ' + u; }
+function wFmt(ml, u, dec) { u = u || wUnit(); const d = dec === undefined ? wDec(u) : dec, n = wNum(ml, u); return (n === 0 ? '0' : n.toFixed(d)) + ' ' + u; }
 function toMl(v, u) { const n = Number(v); return u === 'L' ? n * 1000 : u === 'oz' ? n * OZ : n; }
 function waterInfo(ds) {
-  const c = d0().cfg, bot = Number(c.bottle_ml) || 750, tgt = Number(dow(ds) === 'Sat' ? c.water_target_rest : c.water_target_train) || 4000;
+  const c = d0().cfg, bot = Number(c.bottle_ml) || 750, dp = typeof dayPlan === 'function' ? dayPlan(ds) : null, rest = dp ? /^(Rest|Recovery)$/.test(dp.load) : dow(ds) === 'Sat', tgt = Number(rest ? c.water_target_rest : c.water_target_train) || 4000;
   const ml = Number((logs('WaterLog', ds)[0] || {}).ml) || 0;
   return { bot, tgt, ml };
 }

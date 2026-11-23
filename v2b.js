@@ -81,10 +81,10 @@ function viewFuel2() {
   const ds = todayStr(), p = dayPlan(ds), ses = sessionFor(ds);
   let h = v2head(shortDate(ds) + (p ? ' · ' + dayTypeName(p.daytype) : ''), 'Fuel', false);
   if (!p || !mealsFor(p.daytype).length) return h + '<div class="v2card">' + GILL.plate + '<p class="v2mut">' + (!(D().meals || []).length ? 'No meal plan yet. Add your meals to the Meals tab of your Google Sheet, then tap Reload from sheet in Settings and more.' : 'No meals planned for today. You can still log food.') + '</p><button class="v2btn2 wide" data-act="mextra">Add food</button></div>';
-  const F = v2fuel(ds, p), tg = targetFor(p.daytype), kT = Number(tg.kcal) || 0, pT = proteinTarget(tg), nowI = F.V.findIndex((x) => x.st === 'todo');
-  h += '<section class="v2card v2macro"><div class="v2mac">' + gdonut(F.kcal / (kT || 1), '#8B7CF6', 64, 'Calories ' + F.kcal + ' of ' + kT) + '<div><span class="v2lbl">Calories</span><b class="v2num">' + F.kcal.toLocaleString('en') + '</b><span class="v2mut">of ' + kT.toLocaleString('en') + '</span></div></div>' +
-    '<div class="v2mac">' + gdonut(F.prot / (pT || 1), '#4ADE9B', 64, 'Protein ' + F.prot + ' of ' + pT + ' grams') + '<div><span class="v2lbl">Protein</span><b class="v2num">' + F.prot + ' g</b><span class="v2mut">of ' + pT + ' g</span></div></div>' +
-    '<p class="v2mut v2span">Carbs ' + esc(tg.carbs || '–') + ' g · fat ' + esc(tg.fat || '–') + ' g today</p></section>';
+  const F = v2fuel(ds, p), tg = targetFor(p.daytype), kT = Number(tg.kcal) || 0, pT = proteinTarget(tg), nowI = F.V.findIndex((x) => x.st === 'todo'), est = F.V.some((x) => x.m.protEst), planK = F.V.reduce((a, x) => a + (Number(x.m.kcal) || 0), 0);
+  h += '<section class="v2card v2macro"><div class="v2mac">' + gdonut(F.kcal / (kT || 1), 'var(--v2vio)', 64, 'Calories ' + F.kcal + ' of ' + kT) + '<div><span class="v2lbl">Calories</span><b class="v2num">' + F.kcal.toLocaleString('en') + '</b><span class="v2mut">of ' + kT.toLocaleString('en') + '</span></div></div>' +
+    '<div class="v2mac">' + gdonut(F.prot / (pT || 1), 'var(--v2ok)', 64, 'Protein ' + F.prot + ' of ' + pT + ' grams') + '<div><span class="v2lbl">Protein</span><b class="v2num">' + (est ? '≈' : '') + F.prot + ' g</b><span class="v2mut">of ' + pT + ' g</span></div></div>' +
+    '<p class="v2mut v2span">Carbs ' + esc(tg.carbs || '–') + ' g · fat ' + esc(tg.fat || '–') + ' g today' + (est ? ' · protein estimated from what each meal contains' : '') + '</p>' + (kT && planK < kT - 150 ? '<p class="v2mut v2span">Your planned meals add up to ' + planK.toLocaleString('en') + ' kcal, ' + (kT - planK).toLocaleString('en') + ' under today\'s target.</p>' : '') + '</section>';
   h += '<section class="v2card v2list"><div class="v2hd"><span class="v2lbl">Today</span><span class="v2mut">' + (D().cfg.auto_meals === 'off' ? 'Tap a meal to log it' : 'Counted as planned unless you change it') + '</span></div>' +
     F.V.map((x, i) => {
       const st = x.st, mark = st === 'ate' || st === 'auto' ? '✓' : st === 'skipped' ? '✕' : st === 'swap' ? '↺' : '';
@@ -141,14 +141,14 @@ function viewYou2() {
   if (ev) h += '<section class="v2card v2prop v2race-card">' + gtile('flag', 'warm') + '<span class="v2lbl">' + esc(ev.name) + ' · ' + daysBetween(todayStr(), ev.date) + ' days</span>' + (ev.goal ? '<b class="v2num">goal ' + esc(ev.goal) + '</b>' : '') + '<button class="v2link" data-act="gcopen">Is my goal realistic? ›</button></section>';
   h += v2readinessBars();
   if (pr.length) h += '<section class="v2card v2grid3">' + pr.map((r) => '<button class="v2stat" data-act="prsheet" data-n="' + esc(r.name) + '">' + gi('trophy', 'gtr') + '<span class="v2lbl">' + esc(r.name) + '</span><b>' + esc(prShow(r.best ? r.best.value : r.value, r.unit || (r.best && r.best.unit))) + '</b></button>').join('') + '</section>';
-  h += '<button class="v2card v2flat v2cta" data-act="v2go" data-sub="consistency">' + gdonut(C.pct / 100, '#8B7CF6', 56, 'Consistency ' + C.pct + ' percent') + '<span class="v2grow"><span class="v2lbl">Consistency · 4 weeks</span><b class="v2num">' + C.pct + '%</b><span class="v2mut">Planned rest and breaks count as done</span></span><span class="v2li-e">›</span></button>';
+  h += '<button class="v2card v2flat v2cta" data-act="v2go" data-sub="consistency">' + gdonut(C.pct / 100, 'var(--v2vio)', 56, 'Consistency ' + C.pct + ' percent') + '<span class="v2grow"><span class="v2lbl">Consistency · 4 weeks</span><b class="v2num">' + C.pct + '%</b><span class="v2mut">Planned rest and breaks count as done</span></span><span class="v2li-e">›</span></button>';
   const L = [['How Apex sees you', 'Patterns from your training, food, sleep and choices', 'profile', 'face', 'vio'], ['Weekly review', 'Your week, next week\'s proposals, share as PDF', 'review', 'cal', 'blue'], ['Training and runs', 'Load, fatigue check, runs, records', 'training', 'run', 'blue'], ['Health watch', 'Early illness warning and how to stay healthy', 'health', 'heart', 'bad'], ['Body', 'Weight, waist, weight plan, photos', 'body', 'scale', 'ok'], ['All insights', 'Recovery charts, what works for you', 'insights', 'chart', 'vio'], ['Season planner', 'Blocks between your races', 'season', 'route', 'warm'], ['Extras', 'Timer, PR planner, skills and more tools', 'extras', 'tools', 'vio'], ['Settings and more', 'Connections, races, supplements, coach, preferences', 'more', 'gear', 'mut']];
   h += '<section class="v2card v2list">' + L.map(([t, s, sub, ic, tone]) => v2row('v2go', t, s, '', ' data-sub="' + sub + '"', ic, tone)).join('') + '</section>';
   return h;
 }
 function v2consPage() {
   const C = v2consistency(28), lab = { d: '✓', br: 'br', off: 'off', m: '✕', n: '·' };
-  return '<h1 class="v2h1">Consistency</h1><section class="v2card v2flat"><div style="color:var(--v2tx)">' + v2ring(C.pct, '#8B7CF6') + '</div><div class="v2grow"><span class="v2lbl">Last 4 weeks</span><b>You follow the plan, rest included</b><span class="v2mut">Planned rest, breaks and sick days never lower the score.</span></div></section>' +
+  return '<h1 class="v2h1">Consistency</h1><section class="v2card v2flat"><div style="color:var(--v2tx)">' + v2ring(C.pct, 'var(--v2vio)') + '</div><div class="v2grow"><span class="v2lbl">Last 4 weeks</span><b>You follow the plan, rest included</b><span class="v2mut">Planned rest, breaks and sick days never lower the score.</span></div></section>' +
     '<section class="v2card"><div class="v2cal" role="img" aria-label="Last 28 days">' + C.days.map(([ds, k]) => '<span class="c-' + k + '" title="' + esc(niceDate(ds)) + '">' + lab[k] + '</span>').join('') + '</div><p class="v2mut">✓ done · off / br planned rest · ✕ missed</p></section>' + consistencyCard();
 }
 function v2profile() {
@@ -199,16 +199,19 @@ function v2shortcuts() {
 function v2seasonBlocks() {
   const t = todayStr(), ev = (D().events || []).filter((e) => e.date && e.date >= t).sort((a, b) => (a.date < b.date ? -1 : 1)), c = D().cfg, out = [];
   const st = c.program_start, N = planWeeks();
-  if (st && D().plan.length) out.push({ k: 'cur', name: c.program_name || 'Current block', from: st, to: dateAdd(st, N * 7 - 1), note: 'running now' });
+  if (st && D().plan.length) { const end = dateAdd(st, N * 7 - 1); out.push({ k: 'cur', name: c.program_name || 'Current block', from: st, to: end, note: t < st ? 'starts in ' + daysBetween(t, st) + (daysBetween(t, st) === 1 ? ' day' : ' days') : t > end ? 'finished' : 'running now' }); }
+  const curEnd = out.length ? out[0].to : null;
   let cur = out.length ? dateAdd(out[0].to, 1) : t;
   ev.forEach((e, i) => {
     out.push({ k: 'race', name: e.name, date: e.date, goal: e.goal });
     const after = dateAdd(e.date, 1), next = ev[i + 1];
-    out.push({ k: 'rec', name: 'Recovery', from: after, to: dateAdd(after, 13), note: 'easy runs, mobility, gym at 70%' });
+    // a race inside the current block: that block already holds the recovery days, so only the rest of the 2 weeks is added
+    const recFrom = curEnd && curEnd >= after ? dateAdd(curEnd, 1) : after, recTo = dateAdd(after, 13);
+    if (daysBetween(recFrom, recTo) >= 6) out.push({ k: 'rec', name: 'Recovery', from: recFrom, to: recTo, note: 'easy runs, mobility, gym at 70%' });
     if (next) {
-      const wks = Math.floor(daysBetween(dateAdd(after, 14), next.date) / 7);
+      const wks = Math.floor(daysBetween(recTo > (curEnd || '') ? dateAdd(recTo, 1) : dateAdd(curEnd, 1), next.date) / 7);
       if (wks >= 3) {
-        const taper = wks >= 8 ? 2 : 1, base = Math.max(0, Math.round((wks - taper) / 3)), build = wks - taper - base, s0 = dateAdd(after, 14);
+        const taper = wks >= 8 ? 2 : 1, base = Math.max(0, Math.round((wks - taper) / 3)), build = wks - taper - base, s0 = recTo > (curEnd || '') ? dateAdd(recTo, 1) : dateAdd(curEnd, 1);
         if (base) out.push({ k: 'base', name: 'Strength base', from: s0, to: dateAdd(s0, base * 7 - 1), note: 'heavy legs and pulling, short runs' });
         const s1 = dateAdd(s0, base * 7); out.push({ k: 'build', name: /hyrox/i.test(next.name) ? 'HYROX build' : 'Build', from: s1, to: dateAdd(s1, build * 7 - 1), note: /hyrox/i.test(next.name) ? 'stations, compromised running, sleds' : 'race-specific work' });
         const s2 = dateAdd(s1, build * 7); out.push({ k: 'taper', name: 'Taper', from: s2, to: dateAdd(next.date, -1), note: 'volume down, race pace sharp' });
