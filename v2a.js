@@ -75,9 +75,69 @@ function stravaMatch(ds, ses) {
     return t == null || st == null || Math.abs(st - t) <= 240;
   }) || null;
 }
+/* ---------- AM / PM parts: a day with "# AM ..." and "# PM ..." blocks can be done or skipped one part at a time ----------
+   Each part is logged as its own WorkoutLog row ("<session> · AM"). When both parts are decided, the day's own row is
+   written too (done, partly done or skipped), so every other screen keeps working from the day's row. */
+const PART_TIME = { AM: null, PM: '18:00' };
+function sesParts(ses) {
+  if (!ses || !ses.details || !ses.p || ses.p.load === 'Rest') return null;
+  const secs = []; let cur = null;
+  String(ses.details).split('\n').forEach((l) => { if (/^\s*#/.test(l)) { cur = { head: l.replace(/^\s*#+\s*/, ''), lines: [l] }; secs.push(cur); } else if (cur) cur.lines.push(l); else { cur = { head: '', lines: [l] }; secs.push(cur); } });
+  const tag = (h) => (/^AM\b/i.test(h) ? 'AM' : /^PM\b/i.test(h) ? 'PM' : '');
+  if (!secs.some((x) => tag(x.head) === 'AM') || !secs.some((x) => tag(x.head) === 'PM')) return null;
+  const names = String(ses.name).split(/\s+·\s+/);
+  return ['AM', 'PM'].map((k) => {
+    const mine = secs.filter((x) => tag(x.head) === k || (!tag(x.head) && /^note|^reels?/i.test(x.head)));
+    const nm = (names.find((n) => new RegExp('^' + k + '\\b', 'i').test(n)) || mine[0].head).replace(new RegExp('^' + k + '\\s*', 'i'), '').replace(/:.*$/, '').trim();
+    const tail = (String(ses.name).match(/\s(\((?:comeback|easing in|easy)\))(?:\s|$)/) || [])[1] || '';
+    const label = (nm.charAt(0).toUpperCase() + nm.slice(1)).replace(/\s*\((?:comeback|easing in|easy)\)\s*/g, ' ').trim();
+    const p = Object.assign({}, ses.p, { time: k === 'AM' ? ses.p.time : (PART_TIME.PM) });
+    return { k, label, full: label + (tail ? ' ' + tail : ''), log: ses.name + ' · ' + k, ses: Object.assign({}, ses, { name: label + (tail ? ' ' + tail : ''), details: mine.map((x) => x.lines.join('\n')).join('\n'), p, part: k, whole: ses.name }) };
+  });
+}
+function partRow(ds, P) { return D().logs.WorkoutLog.find((r) => r.date === ds && r.session === P.log) || null; }
+// keep the day's own row in step with its two parts (writes only when something is out of step)
+function partsSync(ds, ses) {
+  const PS = sesParts(ses); if (!PS) return;
+  const st = PS.map((P) => (partRow(ds, P) || {}).status || ''), whole = logs('WorkoutLog', ds).find((r) => r.session === ses.name);
+  const decided = st.every((x) => x === 'done' || x === 'skipped');
+  if (!decided) { if (whole && /parts/.test(whole.note || '')) v2quiet({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: ses.name } }); return; }
+  if (whole && !/parts/.test(whole.note || '')) return; // logged by hand for the whole day: leave it
+  const nd = st.filter((x) => x === 'done').length, sk = PS.filter((P, i) => st[i] === 'skipped').map((P) => P.k);
+  const row = { date: ds, session: ses.name, status: nd ? 'done' : 'skipped', note: (nd === 1 ? 'partial · ' : '') + 'parts: ' + PS.map((P, i) => P.k + ' ' + (st[i] === 'done' ? 'done' : 'skipped')).join(', '), time: nowTime(), rpe: (whole && whole.rpe) || '', energy: '' };
+  if (!whole || whole.status !== row.status || whole.note !== row.note) v2quiet({ action: 'log', table: 'WorkoutLog', row });
+  return sk;
+}
+function partsLine(ds, ses) {
+  const PS = sesParts(ses); if (!PS) return '';
+  return PS.map((P) => { const r = partRow(ds, P); return P.k + ' ' + (r ? (r.status === 'done' ? 'done' : 'skipped') : 'to do'); }).join(' · ');
+}
+function partsHTML(ds, ses) {
+  const PS = sesParts(ses); if (!PS) return '';
+  const t = todayStr();
+  return '<div class="v2parts" role="list">' + PS.map((P) => {
+    const r = partRow(ds, P), K = sesKind(P.ses.name, P.ses.p.load), bl = parseSession(P.ses.details).filter((b) => !b.skip);
+    let mins = 0; try { mins = estMin(bl); } catch (e) { mins = 0; }
+    const st = r ? r.status : '', auto = r && /^auto: Strava/.test(r.note || ''), strength = liveList(P.ses).some((x) => !/\b(run|jog|km|stride)/i.test(x.raw));
+    const acts = st ? '<span class="v2tag ' + (st === 'done' ? 'ready">DONE' + (auto ? ' · STRAVA' : '') : 'rest">SKIPPED') + '</span><button class="v2btn2 sm" data-act="v2part" data-s="undo" data-k="' + P.k + '" data-d="' + ds + '" aria-label="Undo ' + P.k + '">Undo</button>'
+      : ds <= t ? (strength && ds === t ? '<button class="v2btn v2btn-s" data-act="v2live" data-d="' + ds + '" data-k="' + P.k + '">Start</button>' : '') + '<button class="v2btn2 sm" data-act="v2part" data-s="done" data-k="' + P.k + '" data-d="' + ds + '">Did it</button><button class="v2btn2 sm" data-act="v2part" data-s="skip" data-k="' + P.k + '" data-d="' + ds + '">Skip ' + P.k + '</button>' : '';
+    return '<div class="v2part' + (st ? ' ' + (st === 'done' ? 'done' : 'skip') : '') + '" role="listitem">' + gtile(st === 'done' ? 'check' : K[0], st === 'done' ? 'ok' : st ? 'mut' : K[1]) + '<div class="v2grow"><span class="v2lbl">' + P.k + (P.ses.p.time && P.k === 'AM' ? ' · ' + esc(P.ses.p.time) : P.k === 'PM' ? ' · afternoon' : '') + '</span><b>' + esc(P.label) + '</b><span class="v2mut">' + (mins ? 'About ' + mins + ' min · ' : '') + bl.length + ' block' + (bl.length === 1 ? '' : 's') + '</span><div class="v2part-a">' + acts + '</div></div></div>';
+  }).join('') + '</div>';
+}
 function autoWorkout(ds) {
-  if (D().cfg.auto_workouts === 'off' || LS.getItem('aw-' + ds)) return;
-  const ses = sessionFor(ds); if (!ses || logs('WorkoutLog', ds).some((r) => r.session === ses.name)) return;
+  if (D().cfg.auto_workouts === 'off') return;
+  const ses0 = sessionFor(ds), PS = sesParts(ses0);
+  if (PS) { // Strava activities fill in the part they match: a run for AM, a gym session in the afternoon for PM
+    PS.forEach((P) => {
+      if (LS.getItem('aw-' + ds + '-' + P.k) || partRow(ds, P) || logs('WorkoutLog', ds).some((r) => r.session === ses0.name)) return;
+      const a = stravaMatch(ds, P.ses); if (!a) return;
+      LS.setItem('aw-' + ds + '-' + P.k, '1');
+      v2quiet({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: P.log, status: 'done', note: 'auto: Strava ' + String(a.name || a.type).slice(0, 60), time: String(a.start || '').match(/\d{1,2}:\d{2}/) ? String(a.start).match(/\d{1,2}:\d{2}/)[0].padStart(5, '0') : nowTime(), rpe: '', energy: '' } });
+    });
+    return;
+  }
+  if (LS.getItem('aw-' + ds)) return;
+  const ses = ses0; if (!ses || logs('WorkoutLog', ds).some((r) => r.session === ses.name)) return;
   const a = stravaMatch(ds, ses); if (!a) return;
   LS.setItem('aw-' + ds, '1');
   v2quiet({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: ses.name, status: 'done', note: 'auto: Strava ' + String(a.name || a.type).slice(0, 60), time: String(a.start || '').match(/\d{1,2}:\d{2}/) ? String(a.start).match(/\d{1,2}:\d{2}/)[0].padStart(5, '0') : nowTime(), rpe: '', energy: '' } });
@@ -132,6 +192,7 @@ function v2nextUp(ds, p) {
     '<div class="v2li v2water">' + gtile('drop', 'blue') + '<span class="v2li-t"><span class="v2time2">Water</span><span class="v2bar"><i style="width:' + Math.min(100, Math.round(100 * W.ml / (W.tgt || 1))) + '%;background:#38BDF8"></i></span><span>' + esc(wFmt(W.ml)) + ' of ' + esc(wFmt(W.tgt)) + (W.heat ? ' · hot day' : '') + '</span></span><button class="v2btn2 sm" data-act="wplus" aria-label="Add a bottle">+ Bottle</button></div></section>';
 }
 function sessionCard(ds, ses) {
+  partsSync(ds, ses);
   const p = ses.p, wl = logs('WorkoutLog', ds).find((r) => r.session === ses.name), blocks = parseSession(ses.details).filter((b) => !b.skip);
   let mins = 0; try { mins = estMin(blocks); } catch (e) { mins = 0; }
   const load = ses.mode === 'swap' ? 'Recovery' : p.load;
@@ -139,14 +200,14 @@ function sessionCard(ds, ses) {
     const auto = /^auto: Strava/.test(wl.note || ''), a = auto ? stravaMatch(ds, ses) : null, rp = Number(wl.rpe) || 0;
     return '<section class="v2card v2ses done"><div class="v2ses-h">' + gtile('check', 'ok') + '<div class="v2grow"><span class="v2tag ready">DONE' + (auto ? ' · FROM STRAVA' : '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2></div></div>' +
       (a ? '<div class="v2stats"><div><b>' + esc(a.distance_km) + ' km</b><span>distance</span></div><div><b>' + (Number(a.distance_km) > 0 ? fmtSec(Math.round(Number(a.moving_min) * 60 / Number(a.distance_km))) : '-') + '</b><span>min per km</span></div><div><b>' + esc(a.avg_hr || '-') + '</b><span>avg HR</span></div></div>' : '<span class="v2mut">Logged ' + esc(wl.time || '') + '</span>') +
-      '<b class="v2q">How hard did it feel?</b><div class="v2rpe" role="group" aria-label="Effort from 6 to 10">' + [6, 7, 8, 9, 10].map((v) => '<button class="' + (rp === v ? 'on' : '') + '" aria-pressed="' + (rp === v) + '" data-act="v2rpe" data-v="' + v + '">' + v + '</button>').join('') + '</div><span class="v2mut">6 easy · 8 hard but steady · 10 all out</span>' +
-      '<div class="v2row2"><button class="v2btn2" data-act="wundo">' + (auto ? 'Not me, undo' : 'Undo') + '</button><button class="v2btn2" data-act="v2go" data-sub="session" data-d="' + ds + '">See session</button></div></section>';
+      (sesParts(ses) ? '<span class="v2mut">' + esc(partsLine(ds, ses)) + '</span>' : '') + '<b class="v2q">How hard did it feel?</b><div class="v2rpe" role="group" aria-label="Effort from 6 to 10">' + [6, 7, 8, 9, 10].map((v) => '<button class="' + (rp === v ? 'on' : '') + '" aria-pressed="' + (rp === v) + '" data-act="v2rpe" data-v="' + v + '">' + v + '</button>').join('') + '</div><span class="v2mut">6 easy · 8 hard but steady · 10 all out</span>' +
+      '<div class="v2row2"><button class="v2btn2" data-act="v2wundo">' + (auto ? 'Not me, undo' : 'Undo') + '</button><button class="v2btn2" data-act="v2go" data-sub="session" data-d="' + ds + '">See session</button></div></section>';
   }
-  if (wl && wl.status === 'skipped') return '<section class="v2card v2ses"><span class="v2tag rest">SKIPPED</span><h2 class="v2h2">' + esc(ses.name) + '</h2><div class="v2row2"><button class="v2btn2" data-act="wundo">Undo</button></div></section>';
+  if (wl && wl.status === 'skipped') return '<section class="v2card v2ses"><span class="v2tag rest">SKIPPED</span><h2 class="v2h2">' + esc(ses.name) + '</h2>' + (sesParts(ses) ? '<span class="v2mut">' + esc(partsLine(ds, ses)) + '</span>' : '') + '<div class="v2row2"><button class="v2btn2" data-act="v2wundo">Undo</button></div></section>';
   const K = sesKind(ses.name, load);
   const eased = /recommended: easier/.test(p.reason || ''), fl = S.eased && S.eased.ds === ds && Date.now() - S.eased.t < 5000;
   return '<section class="v2card v2ses' + (fl ? ' flash' : '') + '"><div class="v2ses-h">' + gtile(K[0], K[1]) + '<div class="v2grow"><span class="v2lbl">Today\'s session · ' + esc(p.time || '') + (eased ? ' · <span class="v2eased">' + gi('check') + 'Made easier</span>' : '') + '</span><h2 class="v2h2">' + esc(ses.name) + '</h2><span class="v2mut">' + (mins ? 'About ' + mins + ' min · ' : '') + blocks.length + ' block' + (blocks.length === 1 ? '' : 's') + (ses.injured ? ' · ' + ses.injured + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) : '') + '</span></div>' + v2tag(load) + '</div>' +
-    '<div class="v2row2"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="v2change">Change</button></div>' +
+    (sesParts(ses) ? partsHTML(ds, ses) + '<div class="v2row2"><button class="v2btn2" data-act="v2change" style="flex:1">Change the whole day</button></div>' : '<div class="v2row2"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="v2change">Change</button></div>') +
     '<button class="v2link" data-act="v2go" data-sub="session" data-d="' + ds + '">See all exercises and reels ›</button></section>';
 }
 function proposalCard(ds) {
@@ -232,7 +293,7 @@ function changeBody() {
 /* ---------- live workout ---------- */
 function liveList(ses) {
   const out = [];
-  parseSession(ses.details).filter((b) => !b.skip).forEach((b, bi) => b.ex.forEach((e) => { if (/^reels?:/i.test(e)) return; const t = rxTarget(e, ''); out.push({ name: e.replace(/,?\s*\d+(?:-\d+)?\s*(?:each(?:\s+\w+)?\s*)?[×x]\s*\d+.*$/i, '').replace(/\s*\d+(\.\d+)?\s*kg/i, '').trim() || e, raw: e, sets: t.sets, reps: t.reps, kg: t.kg, rest: b.rest || 90, block: bi, head: b.head }); }));
+  parseSession(ses.details).filter((b) => !b.skip).forEach((b, bi) => b.ex.forEach((e) => { if (/^reels?:/i.test(e)) return; const t = rxTarget(e, ''); out.push({ name: e.replace(/,?\s*\d+(?:-\d+)?\s*(?:s|sec|m|cal)?\s*(?:each(?:\s+\w+)?\s*)?[×x]\s*\d+.*$/i, '').replace(/\s*\+?\s*\d+(\.\d+)?\s*kg/i, '').replace(/[,\s]+$/, '').trim() || e, raw: e, sets: t.sets, reps: t.reps, kg: t.kg, rest: b.rest || 90, block: bi, head: b.head }); }));
   return out;
 }
 function liveHTML() {
@@ -250,8 +311,10 @@ function liveHTML() {
     '<div class="v2row2"><button class="v2btn2" data-act="v2liveskip">Skip exercise</button><button class="v2btn2" data-act="exopen" data-n="' + esc(X.raw) + '" data-rx="" data-rest="' + X.rest + '">History and how-to</button></div>' +
     (nx ? '<div class="v2next"><span class="v2lbl">Up next</span><b>' + esc(nx.name) + ' · ' + nx.reps + ' × ' + nx.sets + '</b></div>' : '<div class="v2next"><span class="v2lbl">Last exercise</span></div>');
 }
-function liveOpen(ds) {
-  const ses = sessionFor(ds || todayStr()); if (!ses) return;
+function liveOpen(ds, k) {
+  let ses = sessionFor(ds || todayStr()); if (!ses) return;
+  const PS = sesParts(ses), P = PS && (PS.find((x) => x.k === k) || PS.find((x) => !partRow(ds || todayStr(), x) && liveList(x.ses).length));
+  if (P) { ses = Object.assign({}, P.ses, { name: P.log }); }
   const list = liveList(ses); if (!list.length) { toast('No exercises to log in this session. Use Did it.'); return; }
   S.live = { ds: ds || todayStr(), ses: ses.name, list, i: 0, set: 1, t0: Date.now(), done: 0 };
   liveLoad(); let box = $('#v2live'); if (!box) { box = document.createElement('div'); box.id = 'v2live'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-label', 'Live workout'); document.body.appendChild(box); }
@@ -295,7 +358,21 @@ Object.assign(COACH_ACTS, {
     if (C.opt === 'swap') { closeSheets(); COACH_ACTS.adjopen({ dataset: { m: 'nogym', d: ds } }); return; }
     if (C.opt === 'move' || C.opt === 'rest') { S.off = { why: { busy: 'busy', ill: 'ill', sore: 'sore', nogym: 'busy' }[why] || 'tired', move: C.opt === 'move' ? 'move' : 'skip' }; COACH_ACTS.offgo(); }
   },
-  v2live: (el) => liveOpen(el && el.dataset.d),
+  v2live: (el) => liveOpen(el && el.dataset.d, el && el.dataset.k),
+  v2part: (el) => {
+    const ds = el.dataset.d || todayStr(), ses = sessionFor(ds), PS = sesParts(ses), P = PS && PS.find((x) => x.k === el.dataset.k); if (!P) return;
+    const other = PS.find((x) => x !== P), s = el.dataset.s;
+    if (s === 'undo') { LS.setItem('aw-' + ds + '-' + P.k, '1'); v2quiet({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: P.log } }); }
+    else v2quiet({ action: 'log', table: 'WorkoutLog', row: { date: ds, session: P.log, status: s === 'done' ? 'done' : 'skipped', note: 'part', time: nowTime(), rpe: '', energy: '' } });
+    partsSync(ds, ses); render();
+    const oR = partRow(ds, other);
+    toast(s === 'undo' ? P.k + ' is open again.' : P.k + (s === 'done' ? ' done.' : ' skipped.') + (oR ? ' Day saved.' : ' ' + other.k + ' is still on: ' + other.label + '.'));
+  },
+  v2wundo: () => {
+    const ds = todayStr(), ses = sessionFor(ds); if (!ses) return;
+    (sesParts(ses) || []).forEach((P) => { if (partRow(ds, P)) { LS.setItem('aw-' + ds + '-' + P.k, '1'); v2quiet({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: P.log } }); } });
+    send({ action: 'del', table: 'WorkoutLog', row: { date: ds, session: ses.name } });
+  },
   v2setupx: () => { LS.setItem('setup-x', '1'); render(); },
   v2lv: (el) => { const L = S.live, k = el.dataset.k, v = Number(el.dataset.v); if (k === 'kg') L.kg = Math.max(0, Math.round(((Number(L.kg) || 0) + v) * 10) / 10); else L.reps = Math.max(0, L.reps + v); liveDraw(); },
   v2liveset: () => {

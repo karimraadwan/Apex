@@ -14,7 +14,7 @@ const B5 = {
 function H() {
   const h = D().hist || {}, L = D().logs;
   const m = (a, b, k) => { const seen = new Set(), out = []; (b || []).concat(a || []).forEach((r) => { const id = k.map((x) => r[x]).join('|'); if (!seen.has(id)) { seen.add(id); out.push(r); } }); return out; };
-  return { meals: m(h.meals, L.MealLog, ['date', 'slot']), workouts: m(h.workouts, L.WorkoutLog, ['date', 'session']), water: m(h.water, L.WaterLog, ['date']), overrides: m(h.overrides, D().overrides, ['date']), whoop: m(h.whoop, D().whoop, ['date']) };
+  return { meals: m(h.meals, L.MealLog, ['date', 'slot']), workouts: m(h.workouts, L.WorkoutLog.filter((r) => !PART_RE.test(r.session || '')), ['date', 'session']), water: m(h.water, L.WaterLog, ['date']), overrides: m(h.overrides, D().overrides, ['date']), whoop: m(h.whoop, D().whoop, ['date']) };
 }
 UKEYS.Stock = ['name']; UKEYS.CoachMemory = ['id'];
 const ulist0 = ulist;

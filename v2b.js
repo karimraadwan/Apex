@@ -5,14 +5,17 @@ const v2page = (back, backLabel, body) => '<div class="v2pagebar">' + v2back(bac
 /* ---------- Plan ---------- */
 function v2dayInfo(ds) {
   const t = todayStr(), st = D().cfg.program_start, ov = (D().overrides || []).find((o) => o.date === ds), why = String((ov && ov.reason) || '');
-  const ses = sessionFor(ds), wl = logs('WorkoutLog', ds).concat((H().workouts || []).filter((w) => w.date === ds));
+  const ses = sessionFor(ds), wl = logs('WorkoutLog', ds).concat((H().workouts || []).filter((w) => w.date === ds)).filter((w) => !/\s·\s(?:AM|PM)$/.test(w.session || ''));
   const done = wl.find((w) => w.status === 'done'), skip = wl.find((w) => w.status === 'skipped'), partial = done && /^partial/.test(done.note || '');
   if (/^break/i.test(why)) return { k: 'break', ses, done, why };
   if (st && ds < st && !ov) return { k: 'pre', ses: null, done };
   if (!ses) return { k: 'none' };
   const RST = restInfo(ds, ses);
   if (RST && RST.kind !== 'recovery' && !done) return { k: 'rest', ses, label: RST.label };
-  return { k: done ? (partial ? 'partial' : 'done') : skip ? 'skip' : ds < t ? 'missed' : 'plan', ses, done };
+  const PS = sesParts(ses), pr = PS ? PS.map((P) => partRow(ds, P)).filter(Boolean) : [];
+  const pp = PS && (pr.length || done || skip) ? partsLine(ds, ses) : '';
+  if (!done && !skip && pr.length) return { k: pr.some((r) => r.status === 'done') ? 'partial' : ds < t ? 'missed' : 'plan', ses, done: pr.find((r) => r.status === 'done'), pp };
+  return { k: done ? (partial ? 'partial' : 'done') : skip ? 'skip' : ds < t ? 'missed' : 'plan', ses, done, pp };
 }
 function v2weekRows(start) {
   const t = todayStr(), days = [0, 1, 2, 3, 4, 5, 6].map((i) => { const ds = dateAdd(start, i); return Object.assign({ ds }, v2dayInfo(ds)); });
@@ -33,6 +36,7 @@ function v2weekRows(start) {
     else {
       title = d.ses.name; const load = d.ses.mode === 'swap' ? 'Recovery' : d.ses.p.load;
       sub = { done: 'Done' + (d.done && d.done.rpe ? ' · RPE ' + d.done.rpe : ''), partial: 'Partly done', skip: 'Skipped', missed: 'Not logged', rest: d.label || 'Rest', plan: d.ses.p.time || '' }[g.k];
+      if (d.pp) sub = d.pp;
       end = g.k === 'done' ? '<span class="v2ok" aria-label="done">✓</span>' : g.k === 'partial' ? '<span class="v2ok" aria-label="partly done">½</span>' : g.k === 'skip' || g.k === 'missed' ? '<span class="v2no" aria-label="' + (g.k === 'skip' ? 'skipped' : 'not logged') + '">✕</span>' : v2tag(load);
     }
     const K = g.k === 'break' ? ['moon', 'vio'] : g.k === 'pre' || g.k === 'none' ? null : sesKind(d.ses.name, d.ses.p.load);
@@ -70,8 +74,9 @@ function v2session(ds) {
     (ses.injured ? '<p class="injline">' + ICON(TI.heart) + '<span>' + ses.injured + ' exercise' + (ses.injured > 1 ? 's' : '') + ' swapped for your ' + esc(ses.injAreas.join(' and ').toLowerCase()) + '</span></p>' : '') +
     (ses.p.moved ? '<p class="moved">' + ICON(CI.move) + '<span>Moved here ' + esc(String(ses.p.reason || '').replace(/(\d{4}-\d{2}-\d{2})/, (m) => niceDate(m))) + '</span><button class="txt fit" data-act="mvundo" data-d="' + esc(ds) + '" data-r="' + esc(ses.p.reason) + '">Undo</button></p>' : '') +
     '<div class="v2chips"><button class="v2chip" data-act="warmup" data-s="' + esc(ses.name) + '">Warm-up</button><button class="v2chip" data-act="itopen" data-m="emom">Interval timer</button>' + (/barbell|pull|kb|flame/.test(K[0]) || (D().sets || []).some((x) => x.date === ds) ? '<button class="v2chip" data-act="whsend" data-d="' + ds + '">' + gi('share') + 'Send to WHOOP</button>' : '') + (ds >= t ? '<button class="v2chip" data-act="v2change" data-d="' + ds + '">Change</button>' : '') + '</div>' +
+    (sesParts(ses) && !wl && ds <= t ? '<p class="v2lbl">Do or skip each part</p>' + partsHTML(ds, ses) : '') +
     '<div class="card">' + blocksHTML(ses.details, ds) + '</div>';
-  if (ds === t && !wl && load !== 'Rest') h += '<div class="v2sticky"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="wdone">Did it already</button></div>';
+  if (ds === t && !wl && load !== 'Rest' && !sesParts(ses)) h += '<div class="v2sticky"><button class="v2btn" data-act="v2live" style="flex:1">Start session</button><button class="v2btn2" data-act="wdone">Did it already</button></div>';
   return v2page('', back, h);
 }
 

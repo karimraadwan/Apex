@@ -291,3 +291,14 @@ h1.v2h1{font-size:1.75rem}
 #app.enter .gfill{animation:gfill .9s .2s var(--ease) both}
 #app.enter .v2bars i{transform-origin:bottom;animation:ggrow .6s var(--ease) both}
 #app.enter .v2bars i:nth-child(n+5){animation-delay:.05s}#app.enter .v2bars i:nth-child(n+10){animation-delay:.1s}
+/* AM / PM parts */
+.v2parts{display:grid;gap:var(--s2);margin:var(--s3) 0 var(--s2)}
+.v2part{display:flex;gap:var(--s3);align-items:flex-start;padding:var(--s3);border-radius:14px;background:var(--v2vioT)}
+.v2part.done{background:var(--v2okT)}
+.v2part.skip{background:transparent;border:1px dashed var(--v2line)}
+.v2part.skip b{color:var(--v2mut);text-decoration:line-through}
+.v2part .v2grow{display:flex;flex-direction:column;gap:2px;min-width:0}
+.v2part b{font-size:1.02rem}
+.v2part-a{display:flex;flex-wrap:wrap;gap:var(--s2);align-items:center;margin-top:var(--s2)}
+.v2part-a .sm{min-height:44px}
+.v2btn.v2btn-s{min-height:44px;width:auto;font-size:.85rem;padding:0 16px;border-radius:12px}

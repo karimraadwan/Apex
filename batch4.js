@@ -335,7 +335,16 @@ function cuesHTML(name) {
 }
 
 /* ======================= 56. superset + 57. short on time ======================= */
-function estMin(blocks) { return Math.round(blocks.reduce((a, b) => a + (b.skip ? (/warm/i.test(b.head) ? 6 * 60 : 0) : b.ex.reduce((x, e) => x + setsIn(e) * (45 + b.rest), 0)), 0) / 60); }
+// minutes for a session: a block heading that says "40 min" wins; a line like "Easy run 40 min" counts its minutes; otherwise sets x (45 s + rest)
+function estMin(blocks) {
+  const hm = (t) => { const m = String(t || '').replace(/\(.*?\)/g, '').replace(/\brest\b.*$/i, '').match(/(\d+)\s*min\b/i); return m ? Number(m[1]) : 0; };
+  return Math.round(blocks.reduce((a, b) => {
+    if (hm(b.head)) return a + hm(b.head) * 60;
+    const km = String(b.head).match(/(\d+(?:\.\d+)?)\s*km\b/i); if (km && /run|jog/i.test(b.head)) return a + Number(km[1]) * 7 * 60; // easy pace, about 7 min per km
+    if (b.skip) return a + (/warm/i.test(b.head) ? 6 * 60 : 0);
+    return a + b.ex.reduce((x, e) => x + (hm(e) && !/[x×]\s*\d+\s*$/i.test(e) ? hm(e) * 60 : setsIn(e) * (45 + b.rest)), 0);
+  }, 0) / 60);
+}
 function supersetPlan(details) {
   const B = parseSession(details), main = [], out = []; B.forEach((b) => { if (!b.skip) b.ex.forEach((e) => main.push({ e, rest: b.rest, g: muscleOf(e) || e })); });
   const used = new Set();

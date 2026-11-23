@@ -168,7 +168,9 @@ function normalize(d) {
 
 /* ---------- data helpers ---------- */
 const D = () => S.data;
-const logs = (t, date) => D().logs[t].filter((r) => r.date === date);
+// AM/PM part rows ("<session> · AM") are read only through partRow(); everything else sees the day's own row
+const PART_RE = /\s·\s(?:AM|PM)$/;
+const logs = (t, date) => D().logs[t].filter((r) => r.date === date && !(t === 'WorkoutLog' && PART_RE.test(r.session || '')));
 // the day as you will actually live it: override (break, comeback, moved…) first, then the plan. Use for meals and targets.
 function dayPlan(ds) { const s = sessionFor0(ds); return s ? s.p : planFor(ds); }
 const ACTIVE_REC = { session: 'Active recovery', load: 'Recovery', details: '# Active recovery 40 min\n- Easy walk, bike or swim 30 min, HR under 130\n- Mobility 10 min: hips, ankles, thoracic spine\n# Note\n- You should feel better after than before.' };
